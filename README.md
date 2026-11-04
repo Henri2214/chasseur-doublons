@@ -25,4 +25,3 @@ Une alerte s'affiche si une sélection supprime tous les exemplaires d'un groupe
 Écoute sur 127.0.0.1 uniquement par défaut. Les actions sont limitées aux dossiers analysés (et aux
 destinations de déplacement), protégées par un jeton propre à chaque lancement.
 Le clustering visuel est de type « chaînage » : vérifiez les groupes « SIMILAIRES » avant de supprimer.
-# chasseur-doublons
