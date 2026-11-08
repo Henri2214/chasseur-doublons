@@ -93,10 +93,11 @@ body.dragging .tn *{pointer-events:none}
     <label class="opt"><input type="checkbox" id="o_others"><b>Autres fichiers</b></label>
     <label class="opt"><input type="checkbox" id="o_exact" checked><b>Identiques (SHA-256)</b></label>
     <label class="opt"><input type="checkbox" id="o_phash" checked><b>Visuel (pHash)</b></label>
-    <span class="rng" id="r_ph">tolérance <input type="range" id="ph_thr" min="0" max="16" value="6"><span id="v_ph">6</span></span>
+    <label class="opt" id="r_ph">rigueur <select id="rig"><option value="tres_strict">très stricte (copies quasi identiques)</option><option value="strict" selected>stricte (recommandé)</option><option value="normal">normale</option><option value="large">large</option></select></label>
+    <label class="opt" title="Deux photos de dates de prise de vue différentes ne sont jamais groupées"><input type="checkbox" id="o_exif" checked><b>Dates EXIF</b></label>
     <label class="opt">vidéos <select id="vprec"><option value="6">rapide</option><option value="12" selected>précise</option><option value="24">très fine</option></select></label>
     <label class="opt" id="l_ia"><input type="checkbox" id="o_ia"><b>IA (CLIP)</b></label>
-    <span class="rng" id="r_ia">similarité <input type="range" id="ia_thr" min="80" max="99" value="92"><span id="v_ia">0.92</span></span>
+    <span class="rng" id="r_ia">similarité <input type="range" id="ia_thr" min="90" max="99" value="96"><span id="v_ia">0.96</span></span>
     <label class="opt">taille min. <input type="number" id="min_kb" value="0" min="0" style="width:80px"> Ko</label>
   </div>
   <div class="prog" id="progw" style="display:none"><div id="pb"></div></div>
@@ -155,7 +156,7 @@ function toast(msg,err,act){const d=document.createElement("div");if(err)d.class
   if(act){const b=document.createElement("button");b.textContent=act.label;b.onclick=()=>{d.remove();act.fn()};d.append(b)}
   $("#toast").append(d);setTimeout(()=>d.remove(),act?12000:err?8000:4500)}
 const fmtSize=b=>{const u=["o","Ko","Mo","Go","To"];let i=0;while(b>=1024&&i<4){b/=1024;i++}return b.toFixed(i?1:0)+" "+u[i]};
-const fmtDate=t=>new Date(t*1000).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"});
+const fmtDate=(t,utc)=>new Date(t*1000).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"medium",...(utc?{timeZone:"UTC"}:{})});
 const fmtDur=s=>{s=Math.round(s);const m=Math.floor(s/60);return m+":"+String(s%60).padStart(2,"0")};
 const dirOf=p=>p.replace(/[\\/][^\\/]*$/,"");
 
@@ -163,7 +164,6 @@ let groups=[],sel=new Set(),shown=30,byId={},pollT=null;
 const COLORS=["#4c8dff","#3ecf8e","#f5a524","#c77dff","#ff7a90","#2ec4b6"];
 
 // ---------- options
-$("#ph_thr").oninput=e=>$("#v_ph").textContent=e.target.value;
 $("#ia_thr").oninput=e=>$("#v_ia").textContent=(e.target.value/100).toFixed(2);
 function syncOpts(){$("#r_ph").style.display=$("#o_phash").checked?"":"none";$("#r_ia").style.display=$("#o_ia").checked?"":"none"}
 ["o_phash","o_ia"].forEach(i=>$("#"+i).onchange=syncOpts);syncOpts();
@@ -173,7 +173,7 @@ $("#go").onclick=async()=>{
   const path=$("#path").value.trim();if(!path)return toast("Indiquez un chemin",1);
   try{
     await api("/api/scan",{path,options:{images:$("#o_images").checked,videos:$("#o_videos").checked,others:$("#o_others").checked,
-      exact:$("#o_exact").checked,phash:$("#o_phash").checked,ph_thr:+$("#ph_thr").value,ia:$("#o_ia").checked,ia_thr:$("#ia_thr").value/100,min_kb:+$("#min_kb").value||0,vframes:+$("#vprec").value}});
+      exact:$("#o_exact").checked,phash:$("#o_phash").checked,rigor:$("#rig").value,exif:$("#o_exif").checked,ia:$("#o_ia").checked,ia_thr:$("#ia_thr").value/100,min_kb:+$("#min_kb").value||0,vframes:+$("#vprec").value}});
     groups=[];sel.clear();render();poll();
   }catch(e){toast(e.message,1)}
 };
@@ -229,8 +229,10 @@ function render(){
         <div class="thumb" data-act="view" style="height:${w*0.8}px"><img draggable="false" loading="lazy" src="/api/thumb?p=${enc(f.path)}&s=${w*2}" alt="">
           <div class="chk" data-act="sel"><input type="checkbox" tabindex="-1" ${sel.has(f.id)?"checked":""}></div>
           ${f.kind==="video"?`<span class="vid">▶ ${f.dur?fmtDur(f.dur):""}</span>`:""}
+          ${g.kind==="visuel"?(f.ref?`<span class="tag" style="left:44px;right:auto;background:#3ecf8e">réf.</span>`:(f.score!=null?`<span class="tag" style="left:44px;right:auto;background:${f.score>=98?"#3ecf8e":f.score>=94?"#f5a524":"#ef5b5b"}" title="Similarité avec la référence du groupe">${f.score} %</span>`:"")):""}
           ${ci>=0&&g.kind==="visuel"?`<span class="tag" style="background:${COLORS[ci%COLORS.length]}" title="Identique bit à bit aux fichiers de même couleur">=</span>`:""}</div>
-        <div class="info"><div class="name">${esc(f.name)}</div><div class="meta">${fmtSize(f.size)}${dim} · ${fmtDate(f.mtime)}</div>
+        <div class="info"><div class="name">${esc(f.name)}</div><div class="meta">${fmtSize(f.size)}${dim}</div>
+        <div class="meta" title="${f.taken?"Date de prise de vue (EXIF)":"Pas de date EXIF : date de modification du fichier"}">${f.taken?"📷 "+fmtDate(f.taken,true):"🕒 "+fmtDate(f.mtime)}</div>
         <div class="path">${esc(dirOf(f.path))}</div>
         <div class="acts"><button data-act="ren">Renommer</button><button data-act="del">Supprimer</button></div></div></div>`;
     }

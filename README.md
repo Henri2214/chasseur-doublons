@@ -11,8 +11,12 @@ Puis dans la page : saisir (ou « Parcourir ») le chemin, choisir les options, 
 
 ## Détection
 1. **Identiques** : taille -> hash partiel -> SHA-256 complet (tous types de fichiers).
-2. **Visuel (pHash)** : images (redimensionnées, recompressées, converties) et vidéos
-   (5 images-clés + durée similaire). Curseur « tolérance » = distance de Hamming (0 = strict, 6 = défaut).
+2. **Visuel** : le pHash ne sert qu'à trouver des *candidats*, chaque paire est ensuite **vérifiée** :
+   date de prise de vue EXIF et appareil identiques, mêmes proportions, corrélation globale, couleurs,
+   puis comparaison fine bloc par bloc (une personne déplacée, une expression ou un objet différent suffit
+   à rejeter la paire). Le regroupement se fait autour d'une **référence** (pas de chaînage A~B~C) et chaque
+   fichier affiche son % de similarité avec elle. Menu « rigueur » : très stricte / stricte (défaut) / normale / large.
+   Vidéos : 6, 12 ou 24 images clés, durée, couleurs.
 3. **IA (CLIP)** : optionnel, `pip install sentence-transformers` (télécharge ~350 Mo au 1er usage).
    Curseur « similarité » (0.92 par défaut).
 

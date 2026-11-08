@@ -1,7 +1,7 @@
 # Changelog
 
+## 1.1.0 - 2026-11-08
+- Analyse plus fiable : vérification de la date EXIF et de l'appareil, comparaison fine bloc par bloc, groupes autour d'une photo de référence avec score de similarité, menu de rigueur (très stricte / stricte / normale / large), vidéos à 6/12/24 images clés.
+
 ## 1.0.0 - 2026-11-03
-- Détection des doublons exacts (taille, hash partiel, SHA-256).
-- Détection visuelle : pHash pour les images ; pour les vidéos, 6/12/24 images clés, durée et couleurs ; mode IA (CLIP) optionnel.
-- Page web locale : miniatures, aperçu, renommer, supprimer (définitif), déplacer.
-- Bandeau latéral d'arborescence de dossiers avec miniatures, déplacement par glisser-déposer et annulation.
+- Doublons exacts (SHA-256), détection visuelle pHash et vidéos, IA CLIP optionnelle, page web avec miniatures, renommer / supprimer / déplacer, bandeau de dossiers avec glisser-déposer et annulation.

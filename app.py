@@ -10,6 +10,7 @@ Détection :
 Actions en direct depuis la page : supprimer (définitif), déplacer, renommer.
 """
 import argparse
+import calendar
 import hashlib
 import importlib.util
 import os
@@ -24,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 from flask import Flask, Response, abort, jsonify, request, send_file
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 try:
     import cv2
@@ -159,6 +160,97 @@ def load_image(path, kind, maxside, frac=0.5):
         return None
 
 
+# Niveaux de rigueur : le pHash sert à trouver des candidats, puis chaque paire est VÉRIFIÉE
+# (corrélation, différence bloc par bloc, couleurs, date/appareil EXIF, proportions).
+RIGOR = {
+    # ph = distance pHash max pour être CANDIDAT ; ncc/bmax/col = test 48 px ; b2 = test fin 128 px bloc par bloc
+    # date = écart max (s) de la date EXIF de prise de vue ; vph/vdur = vidéos
+    "tres_strict": dict(ph=4,  ncc=0.985, bmax=0.45, col=12, b2=0.22, date=0.001, vph=4, vdur=0.02),
+    "strict":      dict(ph=7,  ncc=0.96,  bmax=0.70, col=18, b2=0.28, date=0.5,   vph=5, vdur=0.03),
+    "normal":      dict(ph=8,  ncc=0.92,  bmax=1.00, col=26, b2=0.45, date=2.0,   vph=6, vdur=0.03),
+    "large":       dict(ph=12, ncc=0.85,  bmax=1.50, col=40, b2=0.80, date=10.0,  vph=9, vdur=0.05),
+}
+DETAIL = {}
+
+
+def detail_array(path):
+    """Image grise 128x128 floutée et normalisée (mise en cache) pour la comparaison fine."""
+    x = DETAIL.get(path)
+    if x is None:
+        im = load_image(path, "image", 256)
+        if im is None:
+            return None
+        g = im.convert("L").resize((128, 128), Image.LANCZOS).filter(ImageFilter.GaussianBlur(1))
+        x = np.asarray(g, dtype=np.float32)
+        x = (x - x.mean()) / (x.std() + 1e-6)
+        if len(DETAIL) > 3000:
+            DETAIL.clear()
+        DETAIL[path] = x
+    return x
+
+
+def verify_detail(pa, pb, P):
+    """Test fin : aucune zone de 8x8 px (sur 128) ne doit différer (personne déplacée, expression, objet...)."""
+    xa, xb = detail_array(pa), detail_array(pb)
+    if xa is None or xb is None:
+        return False
+    blocks = np.abs(xa - xb).reshape(16, 8, 16, 8).mean(axis=(1, 3))
+    return float(blocks.max()) <= P["b2"]
+
+
+def exif_info(im):
+    """(date de prise de vue en secondes, appareil) ; (None, "") si absent."""
+    try:
+        ex = im.getexif()
+        sub = ex.get_ifd(0x8769)
+        dt = sub.get(36867) or sub.get(36868) or ex.get(306)
+        taken = None
+        if isinstance(dt, str) and dt.strip() and not dt.startswith("0000"):
+            taken = float(calendar.timegm(time.strptime(dt.strip()[:19], "%Y:%m:%d %H:%M:%S")))
+            ss = str(sub.get(37521) or "").strip()
+            if ss.isdigit():
+                taken += float("0." + ss)
+        cam = ("%s %s" % (ex.get(271) or "", ex.get(272) or "")).strip().lower()
+        return taken, cam
+    except Exception:
+        return None, ""
+
+
+def fine_features(im):
+    """Empreinte fine : image grise 48x48 + grille de couleurs moyennes 4x4."""
+    gray = np.asarray(im.convert("L").resize((48, 48), Image.LANCZOS), dtype=np.uint8)
+    colg = np.asarray(im.convert("RGB").resize((4, 4), Image.BOX), dtype=np.uint8)
+    return gray, colg
+
+
+def verify_pair(a, b, P):
+    """Compare deux images en détail. Retourne (ok, score 0-100)."""
+    x = a["fine"].astype(np.float32)
+    y = b["fine"].astype(np.float32)
+    x = (x - x.mean()) / (x.std() + 1e-6)
+    y = (y - y.mean()) / (y.std() + 1e-6)
+    ncc = float((x * y).mean())
+    blocks = np.abs(x - y).reshape(6, 8, 6, 8).mean(axis=(1, 3))  # 36 blocs de 8x8
+    bmax = float(blocks.max())
+    colerr = float(np.abs(a["colg"].astype(np.float32) - b["colg"].astype(np.float32)).mean())
+    ok = ncc >= P["ncc"] and bmax <= P["bmax"] and colerr <= P["col"]
+    return ok, max(0.0, min(100.0, 100.0 * ncc))
+
+
+def meta_ok(a, b, P, use_exif=True):
+    """Rejette les paires dont la date de prise de vue, l'appareil ou les proportions diffèrent."""
+    if use_exif:
+        ta, tb = a.get("taken"), b.get("taken")
+        if ta is not None and tb is not None and abs(ta - tb) > P["date"]:
+            return False
+        if a.get("cam") and b.get("cam") and a["cam"] != b["cam"]:
+            return False
+    wa, ha, wb, hb = a.get("w"), a.get("h"), b.get("w"), b.get("h")
+    if wa and ha and wb and hb and abs(wa / ha - wb / hb) > 0.02 * (wa / ha):
+        return False
+    return True
+
+
 def analyse(f):
     """Signature visuelle + dimensions pour une image ou une vidéo."""
     try:
@@ -166,6 +258,7 @@ def analyse(f):
             with Image.open(f["path"]) as im:
                 w, h = im.size
                 orient = im.getexif().get(274, 1)
+                f["taken"], f["cam"] = exif_info(im)
             if orient in (5, 6, 7, 8):
                 w, h = h, w
             im = load_image(f["path"], "image", 256)
@@ -173,6 +266,7 @@ def analyse(f):
                 return
             f["w"], f["h"] = w, h
             f["sig"] = np.array([phash(im)], dtype=np.uint64)
+            f["fine"], f["colg"] = fine_features(im)
         else:
             vn = JOB.get("vn", 12)
             frames, info = video_frames(f["path"], [(i + 0.5) / vn for i in range(vn)])
@@ -308,22 +402,27 @@ def run_scan(root, opt):
         else:
             reps = [[f] for f in files]
 
-        uf = UF(len(reps))
+        adj = defaultdict(dict)  # arêtes VÉRIFIÉES entre représentants : adj[i][j] = score 0-100
+        P = RIGOR.get(opt.get("rigor", "strict"), RIGOR["strict"])
+        use_exif = bool(opt.get("exif", True))
+
+        def link(i, j, score):
+            adj[i][j] = score
+            adj[j][i] = score
 
         # ---- 3. visuel
         use_ph, use_ia = opt.get("phash"), opt.get("ia")
         if use_ph or use_ia:
             media = [i for i, g in enumerate(reps) if g[0]["kind"] in ("image", "video")]
             run_pool([reps[i][0] for i in media], analyse, "Signatures visuelles (images/vidéos)")
-            # propager dimensions aux membres d'un groupe exact
+            # propager dimensions/EXIF aux membres d'un groupe exact
             for g in reps:
                 for x in g[1:]:
-                    for k in ("w", "h", "dur"):
+                    for k in ("w", "h", "dur", "taken", "cam"):
                         if k in g[0]:
                             x[k] = g[0][k]
 
             if use_ph:
-                thr = float(opt.get("ph_thr", 6))
                 for kind in ("image", "video"):
                     idx = [i for i in media if reps[i][0]["kind"] == kind and "sig" in reps[i][0]]
                     if len(idx) < 2:
@@ -333,6 +432,7 @@ def run_scan(root, opt):
                         sigs = sigs[:, 0]
                     durs = np.array([reps[i][0].get("dur", 0) for i in idx], dtype=float)
                     cols = np.stack([reps[i][0]["col"] for i in idx]) if kind == "video" else None
+                    thr = P["ph"] if kind == "image" else P["vph"]
                     set_phase("Comparaison visuelle (%s)" % ("images" if kind == "image" else "vidéos"), len(idx))
                     for a in range(len(idx) - 1):
                         if JOB["cancel"]:
@@ -342,12 +442,23 @@ def run_scan(root, opt):
                         mask = d <= thr
                         if kind == "video":
                             dd = durs[a + 1:]
-                            mask &= np.abs(dd - durs[a]) <= np.maximum(2.0, 0.03 * np.maximum(dd, durs[a]))
-                            # comparaison fine : >= 80 % des images-clés proches, et couleurs moyennes cohérentes
+                            mask &= np.abs(dd - durs[a]) <= np.maximum(2.0, P["vdur"] * np.maximum(dd, durs[a]))
+                            # >= 80 % des images-clés proches, et couleurs moyennes cohérentes
                             mask &= (pc <= thr * 2).mean(axis=1) >= 0.8
                             mask &= np.abs(cols[a + 1:] - cols[a]).mean(axis=(1, 2)) <= 30
                         for j in np.nonzero(mask)[0]:
-                            uf.union(idx[a], idx[a + 1 + j])
+                            ia_, ib_ = idx[a], idx[a + 1 + j]
+                            fa, fb = reps[ia_][0], reps[ib_][0]
+                            if kind == "image":
+                                # 1) date EXIF / appareil / proportions  2) test 48 px  3) test fin 128 px
+                                if not meta_ok(fa, fb, P, use_exif):
+                                    continue
+                                ok, score = verify_pair(fa, fb, P)
+                                if not ok or not verify_detail(fa["path"], fb["path"], P):
+                                    continue
+                            else:
+                                score = 100.0 * (1 - float(d[j]) / 64.0)
+                            link(ia_, ib_, score)
                         JOB["done"] = a + 1
 
             if use_ia:
@@ -376,37 +487,67 @@ def run_scan(root, opt):
                         JOB["done"] = min(len(idx), s + B)
                 if len(ok_idx) > 1:
                     E = np.concatenate(embs)
-                    thr = float(opt.get("ia_thr", 0.92))
+                    thr = float(opt.get("ia_thr", 0.96))
                     set_phase("Comparaison IA", len(ok_idx))
                     C = 512
                     for s in range(0, len(ok_idx), C):
                         if JOB["cancel"]:
                             raise Cancelled()
                         sim = E[s:s + C] @ E.T
-                        rows, cols = np.nonzero(sim >= thr)
-                        for r, c in zip(rows, cols):
+                        rows, cols_ = np.nonzero(sim >= thr)
+                        for r, c in zip(rows, cols_):
                             if c > s + r:
-                                uf.union(ok_idx[s + r], ok_idx[c])
+                                ia_, ib_ = ok_idx[s + r], ok_idx[c]
+                                if meta_ok(reps[ia_][0], reps[ib_][0], P, use_exif):  # même date/appareil/proportions
+                                    link(ia_, ib_, 100.0 * float(sim[r, c]))
                         JOB["done"] = min(len(ok_idx), s + C)
 
         # ---- 4. construction des groupes
         set_phase("Construction des résultats")
-        comp = defaultdict(list)
-        for i in range(len(reps)):
-            comp[uf.find(i)].append(i)
-        groups = []
-        for members in comp.values():
-            fl = []
-            for i in members:
-                g = reps[i]
-                for f in g:
-                    fl.append({"id": f["id"], "path": f["path"], "name": f["name"], "size": f["size"],
-                               "mtime": f["mtime"], "kind": f["kind"], "w": f.get("w"), "h": f.get("h"),
-                               "dur": f.get("dur"), "sub": i if len(g) > 1 else None})
-            if len(fl) < 2:
+
+        def pub(f, i, g, score=None, ref=False):
+            return {"id": f["id"], "path": f["path"], "name": f["name"], "size": f["size"],
+                    "mtime": f["mtime"], "taken": f.get("taken"), "kind": f["kind"], "w": f.get("w"),
+                    "h": f.get("h"), "dur": f.get("dur"), "sub": i if len(g) > 1 else None,
+                    "score": None if score is None else int(round(score)), "ref": ref}
+
+        # Regroupement autour d'une RÉFÉRENCE (pas de chaînage A~B, B~C => A,B,C) : chaque membre est
+        # vérifié directement contre la référence du groupe.
+        groups, used = [], set()
+        seen_nodes, comps = set(), []
+        for start in list(adj):
+            if start in seen_nodes:
                 continue
-            groups.append({"id": len(groups) + 1, "kind": "exact" if len(members) == 1 else "visuel",
-                           "media": fl[0]["kind"], "files": fl})
+            stack, comp = [start], []
+            seen_nodes.add(start)
+            while stack:
+                x = stack.pop()
+                comp.append(x)
+                for y in adj[x]:
+                    if y not in seen_nodes:
+                        seen_nodes.add(y)
+                        stack.append(y)
+            comps.append(comp)
+        for comp in comps:
+            remaining = set(comp)
+            while len(remaining) > 1:
+                a = max(remaining, key=lambda x: (len([y for y in adj[x] if y in remaining]),
+                                                   (reps[x][0].get("w") or 0) * (reps[x][0].get("h") or 0),
+                                                   reps[x][0]["size"]))
+                mem = [y for y in adj[a] if y in remaining]
+                if not mem:
+                    remaining.discard(a)
+                    continue
+                fl = [pub(f, a, reps[a], 100, k == 0) for k, f in enumerate(reps[a])]
+                for y in sorted(mem, key=lambda y: -adj[a][y]):
+                    fl += [pub(f, y, reps[y], adj[a][y]) for f in reps[y]]
+                groups.append({"id": len(groups) + 1, "kind": "visuel", "media": fl[0]["kind"], "files": fl})
+                used.update([a] + mem)
+                remaining -= {a, *mem}
+        for i, g in enumerate(reps):
+            if len(g) > 1 and i not in used:
+                groups.append({"id": len(groups) + 1, "kind": "exact", "media": g[0]["kind"],
+                               "files": [pub(f, i, g) for f in g]})
         with LOCK:
             JOB["groups"] = groups
         JOB["status"] = "done"
