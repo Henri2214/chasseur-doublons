@@ -1,0 +1,231 @@
+# Chasseur de doublons v2
+
+Page web locale (Flask) pour trouver, comparer et trier les doublons de photos, vidéos et fichiers,
+reconnaître les personnes, retrouver une photo par son contenu, et garder la meilleure version d'une série.
+**Tout reste sur votre PC** : aucune photo, aucun visage, aucun texte n'est envoyé sur le réseau
+(seul le téléchargement des modèles, à votre demande, utilise Internet).
+
+## Installation et lancement
+
+Prérequis : Python 3.10 ou plus récent ([python.org](https://www.python.org/downloads/), cocher « Add to PATH »).
+Aucune dépendance à compiler, pas de PyTorch.
+
+- **Windows** : double-clic sur `lancer.bat`. Au premier lancement, l'environnement `.venv` est créé et les
+  dépendances sont installées (`requirements.txt` puis `requirements-optional.txt`).
+- **Linux / macOS** : `./lancer.sh`
+- Options : `python app.py --port 8765 --no-browser --data D:\ChasseurData --models D:\ChasseurModeles`
+
+Puis, dans la page : choisir un dossier, cocher les modules, cliquer sur « Analyser ».
+Les modèles d'IA se téléchargent dans l'onglet **Réglages**, avec une barre de progression. Les fonctions dont
+le modèle est absent sont grisées, avec un message qui explique pourquoi.
+
+Vérification de l'installation sur votre PC (tous les modules, GPU compris) :
+
+```
+python tools/selftest.py --portrait une_photo_de_vous.jpg --autre une_photo_de_quelqu_un_d_autre.jpg
+```
+
+### Accélération GPU (optionnelle)
+Remplacez `onnxruntime` par `onnxruntime-directml` (Windows, toute carte DirectX 12) ou `onnxruntime-gpu`
+(NVIDIA avec CUDA 12 et cuDNN). Les fournisseurs sont choisis automatiquement dans l'ordre CUDA, DirectML, CPU.
+Voir les commentaires de `requirements-optional.txt`.
+
+## Modules (activables séparément)
+
+| Module | Rôle | Modèle | Licence du modèle |
+|---|---|---|---|
+| Exacts | taille, puis hash partiel, puis SHA-256 (tous types de fichiers) | - | - |
+| Visuel | photos redimensionnées, recompressées ou retouchées en luminosité ; vidéos (6/12/24 images clés) | - | - |
+| Qualité | netteté (variance du Laplacien), « garder la meilleure » | - | - |
+| Visages (précis) | détection SCRFD, reconnaissance ArcFace 512 dimensions, points de repère 2d106 (yeux fermés) | InsightFace buffalo_l | **recherche non commerciale** |
+| Visages (licence libre) | détection YuNet, reconnaissance SFace 128 dimensions | OpenCV Zoo | MIT / Apache-2.0 |
+| Objets | 80 classes COCO, noms traduits en français | YOLOX-S (ou Nano) | Apache-2.0 |
+| Texte (OCR) | aucun / captures et documents / toutes les images ; texte indexé (FTS5) | rapidocr-onnxruntime | Apache-2.0 |
+| IA CLIP | recherche en langage naturel, ~40 scènes, doublons « sémantiques » | CLIP ViT-B/32 quantifié (Xenova) | MIT |
+
+### Doublons visuels : comment ça marche
+1. Le pHash (64 bits) sert seulement à trouver des **candidats**. La recherche est vectorisée : index multiple
+   sur les octets pour les rigueurs stricte et très stricte, force brute par blocs numpy sinon.
+2. Chaque paire candidate est ensuite **vérifiée** :
+   - date de prise de vue EXIF et appareil identiques ;
+   - mêmes proportions (écart < 2 %) ;
+   - corrélation à 48 px et couleurs ;
+   - comparaison fine à 128 px bloc par bloc : une personne déplacée, une expression ou un objet différent
+     suffit à rejeter la paire ;
+   - si les deux photos ont des visages : même nombre de visages, boîtes au même endroit (IoU ≥ 0,6 en
+     rigueur stricte, 0,4 en large) et mêmes personnes (cosinus ≥ 0,5).
+3. **Pas de date EXIF** : le contrôle de date est ignoré (aucun repli sur la date de modification du
+   fichier) et le groupe porte le badge « date non vérifiée ».
+4. Les groupes se forment autour d'une **photo de référence** (badge « réf. »), sans chaînage A~B~C :
+   chaque fichier affiche son % de similarité avec la référence.
+5. Quatre niveaux de rigueur (très stricte / stricte / normale / large), plus une rigueur « étalonnée ».
+   Changer de rigueur recalcule depuis l'index **sans relancer l'analyse**.
+
+### Index persistant
+Tout est stocké dans `data/index.sqlite3` (SQLite en mode WAL) : fichiers, empreintes, EXIF, netteté,
+visages, personnes, objets, texte OCR (FTS5), embeddings CLIP, scènes, journal des actions, réponses
+d'étalonnage. Chaque image n'est **décodée qu'une fois** (mode draft de Pillow pour les JPEG, rotation EXIF),
+puis toutes les étapes partent de cette image. Une nouvelle analyse ne traite que les fichiers nouveaux ou
+modifiés (taille + date de modification) et purge les fichiers disparus.
+
+## Interface
+
+- **Doublons** :
+  - groupes paginés côté serveur, badges « réf. », score, « ★ meilleure », « yeux fermés » ;
+  - date EXIF affichée sans décalage de fuseau ;
+  - aperçu plein écran et lecture vidéo ;
+  - sélection automatique (« garder la meilleure », la plus ancienne, la meilleure résolution…) ;
+  - bandeau latéral des dossiers avec miniatures : glisser-déposer d'une miniature vers un dossier, avec
+    bouton « Annuler ».
+- **Personnes** :
+  - grille de visages-types ; renommer, fusionner deux personnes, retirer ou confirmer un visage ;
+  - glisser un visage sur une personne pour l'y affecter ;
+  - « Voir toutes ses photos » ouvre l'Explorer filtré ;
+  - bouton **« Effacer tous les visages et personnes »**.
+- **Explorer** :
+  - une seule zone de recherche qui combine CLIP, objets, texte OCR, noms de personnes, scènes et noms de
+    fichiers ;
+  - filtres : type, personne, objet, scène, flou, dossier, dates ;
+  - résultats paginés et actions groupées (déplacement en masse par glisser-déposer).
+  - Sans CLIP, la recherche fonctionne quand même avec les objets, l'OCR et les personnes.
+- **Étalonnage** : « ces deux photos sont-elles des doublons ? » et « est-ce la même personne ? ». Vos réponses
+  ajustent les seuils ; une fausse détection pèse trois fois plus qu'un doublon manqué.
+- **Rapport** : fichiers ignorés avec leur cause, images/seconde par étape, durée de chaque phase.
+- **Journal** : toutes les suppressions, tous les déplacements et renommages, avec annulation des déplacements
+  et renommages.
+
+## Sécurité des actions
+- La suppression est **définitive**, sans corbeille (choix assumé).
+- Juste avant de supprimer, la taille et la date de modification sont revérifiées. Si le fichier a changé,
+  la suppression est refusée.
+- Supprimer le **dernier exemplaire** d'un groupe est refusé sans une confirmation explicite.
+- Les actions ne portent que sur des fichiers indexés et situés dans le **périmètre de la session** (dossier
+  analysé et destinations de déplacement). Ce périmètre est remis à zéro à chaque nouvelle analyse.
+- Le serveur écoute sur 127.0.0.1 uniquement. Un jeton propre à chaque lancement est exigé pour toute requête
+  d'action, et l'en-tête `Host` est contrôlé (protection contre le DNS rebinding).
+- Fichiers Windows :
+  - chemins longs (> 260 caractères) gérés via le préfixe `\\?\` ;
+  - fichiers verrouillés et fichiers OneDrive non téléchargés signalés clairement. Les seconds sont ignorés
+    pour ne pas déclencher leur téléchargement.
+
+## Licences des modèles — à lire
+- **InsightFace (buffalo_l : det_10g, w600k_r50, 2d106det)** : usage limité à la **recherche non
+  commerciale**. Ces modèles ne sont **jamais** inclus dans le dépôt. Leur téléchargement (archive officielle
+  `github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip`, dont seuls les trois fichiers
+  utiles sont extraits) demande une confirmation explicite de la licence dans l'interface.
+- **Moteur de repli à licence permissive** : OpenCV YuNet (MIT) + SFace (Apache-2.0), à choisir dans
+  Réglages > « Moteur de visages ».
+  - Écart de précision mesuré sur deux images d'exemple : même visage recadré, cosinus 0,98 (ArcFace) contre
+    0,64 à 0,84 (SFace) ; deux personnes différentes, 0,03 contre 0,13.
+  - Conséquence : SFace sépare moins bien les personnes qui se ressemblent et tolère moins les profils et les
+    petits visages ; son seuil par défaut est plus bas (0,40 contre 0,45).
+  - Les yeux fermés ne sont détectés qu'avec InsightFace, car YuNet ne fournit que 5 points de repère.
+- **YOLOX** : Apache-2.0. YOLOv8 n'est volontairement pas utilisé : sa licence AGPL pose problème pour un
+  dépôt public.
+- **CLIP** (OpenAI, conversion ONNX Xenova) : MIT. **rapidocr** : Apache-2.0.
+- Le dossier `models/` est ignoré par git.
+
+## Données biométriques
+Les empreintes de visages (vecteurs de 512 ou 128 nombres) sont des données biométriques.
+- Elles restent dans `data/index.sqlite3`, sur ce PC.
+- Elles ne transitent jamais sur le réseau et ne vont jamais dans git (`data/`, `*.sqlite3` et les miniatures
+  de visages sont ignorés).
+- Le bouton « Effacer tous les visages et personnes » supprime visages, personnes, noms et réponses
+  d'étalonnage des visages, puis compacte la base (VACUUM).
+
+## Performances mesurées (machine de test : 4 cœurs, CPU seul, Linux)
+
+| Mesure | Résultat |
+|---|---|
+| 15 000 images synthétiques 800×600, modules exacts + visuel + qualité | 95 s (158 images/s), RAM max **161 Mo** |
+| Seconde analyse des mêmes 15 000 images, sans changement | **1,1 s** |
+| Calcul des doublons depuis l'index (15 000 images) | 0,25 s |
+| Recherche de candidats pHash sur 100 000 empreintes (seuil 7) | 2,3 s, 80 Mo (36 s en force brute) |
+| Tous modules (InsightFace précis, YOLOX-S, OCR toutes images, CLIP), 240 photos ~1300×900 | ~1,7 image/s, RAM max **1,3 Go**, stable d'une analyse à l'autre |
+
+Débits par étape avec tous les modules, en images/s pour 4 threads :
+- visages (SCRFD 640 + ArcFace) : ~4 ;
+- objets : ~12 ;
+- OCR : ~2 (sérialisé) ;
+- CLIP : ~20 ;
+- décodage : ~110 ;
+- empreintes : ~390.
+
+Sur CPU, une première analyse de 15 000 photos avec **tous** les modules prend donc plusieurs heures. Les
+analyses suivantes ne traitent que les nouveautés. Un GPU (DirectML ou CUDA) accélère visages, objets et CLIP.
+Les débits de votre machine s'affichent dans l'onglet Rapport, ou avec `python tools/bench.py --n 2000`.
+
+## Tests
+
+```
+pip install -r requirements-optional.txt
+python -m pytest                       # 32 tests sans modèle (images synthétiques générées à la volée)
+CD_MODELS_DIR=models CD_TEST_IMAGES=dossier_portraits python -m pytest tests/test_models_real.py
+```
+
+- `test_models_real.py` attend `personne_a.jpg` et `personne_b.jpg`, deux portraits de deux personnes
+  différentes que vous fournissez (aucune photo n'est dans le dépôt).
+- Ce que couvrent les tests :
+  - base et analyse incrémentale ;
+  - pHash et vérification. Doublons attendus : redimensionnement, JPEG, luminosité. Non-doublons attendus :
+    zone déplacée, zone remplacée, décalage, zoom ;
+  - regroupement sans chaînage ;
+  - suppression revérifiée, dernier exemplaire, journal et annulation ;
+  - API (jeton, Host, parcours complet) ;
+  - gestionnaire de modèles (`.part`, vérification de taille, zip, licence) ;
+  - regroupement des visages avec verrouillage.
+
+## Ce qui a été testé, et ce qui ne l'a pas été
+
+**Testé** (Linux, Python 3.13, CPU, sans GPU) :
+- les 32 tests automatiques ;
+- les vrais modèles sur deux images d'exemple publiques (échantillons d'OpenCV) :
+  - InsightFace : détection, reconnaissance, points de repère des yeux ouverts ;
+  - SFace ;
+  - YOLOX (personne, ballon) ;
+  - OCR d'une capture générée ;
+  - CLIP (couleurs, recherche « facture », « sport ») ;
+- une analyse complète avec tous les modules ;
+- l'interface dans Chromium sans affichage (onglets, recalcul de rigueur, glisser-déposer, aucune erreur
+  JavaScript) ;
+- un vrai téléchargement de modèle via le gestionnaire.
+
+**Non testé — à vérifier avec `tools/selftest.py` sur votre PC** :
+- **Windows** : lancer.bat, chemins longs, fichiers verrouillés, fichiers OneDrive, lecteurs réseau. Le code
+  existe mais n'a jamais tourné sous Windows.
+- **GPU** (CUDA, DirectML) : seul le fournisseur CPU a été exécuté.
+- **Seuils sur une vraie photothèque** : rigueurs, seuil « même personne » (0,45 / 0,40), yeux fermés (0,20),
+  flou (60). Ils ne sont calibrés que sur des images synthétiques et deux images d'exemple : utilisez l'onglet
+  **Étalonnage**.
+  - En test, une copie éclaircie de 10 % atteint b2 = 0,25 (la v1.1 annonçait ≤ 0,18). Elle reste acceptée
+    en rigueur stricte (seuil 0,28).
+  - Le niveau « large » a accepté une « zone déplacée » sur un des trois jeux de test.
+- **Yeux fermés** : jamais testés sur une photo aux yeux fermés.
+- **Fichiers HEIC réels** et **vidéos réelles** (MOV/MP4 H.264/H.265) : seule une vidéo MJPEG synthétique a
+  été testée ; le support dépend des codecs de la version d'OpenCV.
+- **Analyse complète de 100 000 images** : seule la recherche de candidats a été mesurée à cette échelle.
+- **Version non quantifiée de CLIP** : non prévue ; seuls les modèles `_quantized` sont gérés.
+
+## Limites connues
+- Les vidéos n'ont que la signature visuelle : pas de visages, d'objets ni de CLIP sur les vidéos.
+- CLIP ne comprend que l'anglais. Les mots français courants (objets, scènes, glossaire d'une centaine de
+  mots) sont traduits ; une requête plus libre en français donne des résultats moins pertinents.
+- L'OCR (modèles chinois/anglais de rapidocr) peut perdre les accents. En mode « captures et documents »,
+  toutes les images sans EXIF d'appareil sont lues : images WhatsApp, téléchargements…
+- Après un redémarrage, relancez l'analyse du dossier pour ouvrir la session (elle est quasi instantanée
+  grâce à l'index) : l'Explorer et les miniatures de visages ne montrent que le périmètre de la session.
+- Le calcul des doublons est synchrone : quelques secondes pour 100 000 images, pendant lesquelles la page
+  attend la réponse.
+- Les personnes sans nom peuvent être renumérotées lors d'un nouveau regroupement. Nommez une personne pour la
+  figer.
+
+## Structure
+```
+app.py                 point d'entrée (arguments, navigateur)
+core/                  config, db (SQLite), imaging (décodage, EXIF, empreintes), scanner (analyse
+                       incrémentale), dupes, faces, persons, objects, ocr, clip, search, calib, actions,
+                       models (téléchargements, sessions ONNX), web (API Flask)
+static/index.html      interface
+tests/                 pytest
+tools/selftest.py      autotest de chaque module ; tools/bench.py : mesures de performance
+```

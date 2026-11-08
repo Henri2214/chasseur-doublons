@@ -1,0 +1,8 @@
+# Base (aucune dépendance à compiler, pas de PyTorch)
+flask>=3.0
+pillow>=10.0
+numpy>=1.24
+opencv-python-headless>=4.8
+onnxruntime>=1.16
+# Photos iPhone (HEIC/HEIF)
+pillow-heif
