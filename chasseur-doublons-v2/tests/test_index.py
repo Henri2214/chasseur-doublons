@@ -84,3 +84,28 @@ def test_fichier_illisible_rapporte(state, tmp_path):
     st = state.scanner.scan_sync(str(root))
     assert any("casse.jpg" in s["path"] for s in st["skipped"])
     assert state.db.one("SELECT status FROM files")["status"] == "error"
+
+
+def test_annulation_immediate(state, tmp_path):
+    """L'annulation interrompt un hash en cours et laisse l'index cohérent (rien de partiel enregistré)."""
+    import pytest
+    from core.scanner import Cancelled, hash_file
+    big = tmp_path / "gros.bin"
+    big.write_bytes(b"\0" * (8 << 20))
+    with pytest.raises(Cancelled):
+        hash_file(str(big), should_stop=lambda: True)
+    root = tmp_path / "p"
+    root.mkdir()
+    for i in range(40):
+        save_jpeg(photo_like(100 + i, 640, 480), root / ("i%02d.jpg" % i), 85)
+    sc = state.scanner
+    sc.cancel = False
+    t = sc.start(str(root), {})
+    sc.cancel = True
+    t.join(30)
+    assert not t.is_alive()
+    assert sc.state["status"] in ("cancelled", "done")
+    # une nouvelle analyse termine le travail normalement
+    st = sc.scan_sync(str(root))
+    assert state.db.one("SELECT COUNT(*) n FROM files WHERE done_visual=1")["n"] == 40
+    assert st["files"] == 40

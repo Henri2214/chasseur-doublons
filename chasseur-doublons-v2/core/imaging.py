@@ -166,7 +166,7 @@ def global_blur(dec):
 
 
 # ------------------------------------------------------------------ vidéos
-def video_frames(path, fracs, maxside=256):
+def video_frames(path, fracs, maxside=256, should_stop=None):
     if cv2 is None:
         return [], {}
     cap = cv2.VideoCapture(lp(path))
@@ -180,6 +180,8 @@ def video_frames(path, fracs, maxside=256):
                 "dur": (n / fps) if fps > 0 and n > 0 else 0}
         frames = []
         for f in fracs:
+            if should_stop and should_stop():
+                break
             if n > 0:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, int(n * f)))
             ok, fr = cap.read()
@@ -195,9 +197,9 @@ def video_frames(path, fracs, maxside=256):
         cap.release()
 
 
-def video_signature(path, vn):
+def video_signature(path, vn, should_stop=None):
     """Signature vidéo : pHash de vn images clés + couleurs moyennes. None si non fiable."""
-    frames, info = video_frames(path, [(i + 0.5) / vn for i in range(vn)])
+    frames, info = video_frames(path, [(i + 0.5) / vn for i in range(vn)], should_stop=should_stop)
     sig = col = None
     # fiable seulement si le nombre d'images est connu et toutes les images clés lues
     if info.get("n", 0) >= vn * 2 and len(frames) == vn:

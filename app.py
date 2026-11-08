@@ -123,6 +123,8 @@ def video_frames(path, fracs=FRACS, maxside=256):
             "dur": (n / fps) if fps > 0 and n > 0 else 0}
     frames = []
     for f in fracs:
+        if JOB["cancel"]:
+            break
         if n > 0:
             cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, int(n * f)))
         ok, fr = cap.read()
@@ -306,6 +308,8 @@ def hash_file(path, partial=False, size=0):
             h.update(str(size).encode())
         else:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
+                if JOB["cancel"]:      # annulation immédiate, même au milieu d'un gros fichier
+                    raise Cancelled()
                 h.update(chunk)
     return h.hexdigest()
 

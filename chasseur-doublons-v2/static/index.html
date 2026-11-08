@@ -271,33 +271,49 @@ function dupOpts(){return{rigor:$("#rig").value,exif:$("#o_exif").checked,clip_d
   images:$("#o_images").checked,videos:$("#o_videos").checked,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,exact:$("#m_exact").checked,visual:$("#m_visual").checked}}
 $("#go").onclick=async()=>{
   const path=$("#path").value.trim();if(!path)return toast("Indiquez un chemin",1);
-  try{await api("/api/scan",{path,options:scanOpts()});sel.clear();$("#res").innerHTML="";poll()}catch(e){toast(e.message,1)}
+  try{await api("/api/scan",{path,options:scanOpts()});sel.clear();started=true;cancelling=false;phaseBase="";
+    $("#phase").textContent="Analyse lancée…";$("#res").innerHTML='<div class="empty" style="font-size:18px">⏳ Analyse en cours…</div>';poll()}catch(e){toast(e.message,1)}
 };
-$("#stop").onclick=()=>api("/api/cancel",{});
-function setRunning(r){$("#go").style.display=r?"none":"";$("#stop").style.display=r?"":"none";$("#progw").style.display=r?"":"none"}
+let cancelling=false,started=false,pollErr=0;
+$("#stop").onclick=async()=>{
+  cancelling=true;$("#stop").disabled=true;$("#stop").textContent="Annulation…";$("#phase").textContent="Annulation en cours…";
+  try{await api("/api/cancel",{})}catch(e){toast("Annulation impossible : "+e.message,1);cancelling=false}
+  poll();
+};
+function setRunning(r){$("#go").style.display=r?"none":"";$("#stop").style.display=r?"":"none";$("#progw").style.display=r?"":"none";
+  if(!r){$("#stop").disabled=false;$("#stop").textContent="Annuler"}}
 let lastStatus="";
 async function poll(){
   clearTimeout(pollT);
-  const s=await api("/api/status");
+  let s;
+  try{s=await api("/api/status");pollErr=0}
+  catch(e){ // une requête perdue ne doit jamais figer la page : on réessaie
+    pollErr++;$("#phase").textContent=`Serveur injoignable (${e.message}) — nouvel essai… (${pollErr})`;
+    pollT=setTimeout(poll,Math.min(5000,500*pollErr));return;
+  }
   if(s.status==="running"){
     setRunning(true);lastStatus="running";
     $("#pb").style.width=(s.total?Math.min(100,100*s.done/s.total):5)+"%";
-    $("#phase").textContent=s.phase+(s.total?` — ${s.done}/${s.total}`:s.done?` — ${s.done} fichiers`:"")+` (${s.elapsed}s)`;
+    $("#phase").textContent=(cancelling?"Annulation en cours… ":"")+s.phase+(s.total?` — ${s.done}/${s.total}`:s.done?` — ${s.done} fichiers`:"")+` (${s.elapsed}s)`;
     pollT=setTimeout(poll,500);return;
   }
+  cancelling=false;
   setRunning(false);
   if(s.root){if(!$("#path").value)$("#path").value=s.root;if(s.root!==scanRoot){scanRoot=s.root;initTree()}}
   s.warnings.forEach(w=>toast(w,1));
   if(s.status==="done"){phaseBase=`Analyse terminée en ${s.elapsed}s.`;$("#phase").textContent=phaseBase;if(lastStatus==="running"||!s.has_results)await recompute();else loadGroups()}
   else if(s.status==="error"){$("#phase").textContent="Erreur : "+s.error;toast(s.error,1)}
-  else if(s.status==="cancelled")$("#phase").textContent="Analyse annulée.";
-  lastStatus=s.status;
+  else if(s.status==="cancelled"){$("#phase").textContent="Analyse annulée.";if(started){toast("Analyse annulée.");$("#res").innerHTML='<div class="empty">Analyse annulée.</div>'}}
+  started=false;lastStatus=s.status;
 }
 let phaseBase="";
 async function recompute(){
   if(!phaseBase)phaseBase=$("#phase").textContent;
   $("#phase").textContent=phaseBase+" Calcul des doublons…";
-  try{const r=await api("/api/dupes",{options:dupOpts()});$("#phase").textContent=phaseBase+` ${r.groups} groupe(s) (calcul ${r.elapsed}s).`;page=1;loadGroups()}
+  try{const r=await api("/api/dupes",{options:dupOpts()});
+    $("#phase").textContent=phaseBase+(r.groups?` ${r.groups} groupe(s) de doublons (calcul ${r.elapsed}s).`:" Aucun doublon trouvé.");
+    if(!r.groups&&started)toast("Aucun doublon trouvé avec la rigueur « "+$("#rig").selectedOptions[0].text+" ».");
+    page=1;loadGroups()}
   catch(e){$("#phase").textContent=phaseBase;toast(e.message,1)}
 }
 ["rig","o_exif","o_clipd","clip_thr"].forEach(i=>$("#"+i).onchange=()=>{sel.clear();recompute()});
@@ -328,7 +344,7 @@ function renderGroups(){
   const d=gdata;byId={};
   $("#dbar").style.display="flex";setTop();
   $("#stats").innerHTML=`<b>${d.summary.groups}</b> groupes · ${d.summary.files} fichiers · récupérable ≈ <b>${fmtSize(d.summary.waste)}</b>`;
-  if(!d.total){$("#res").innerHTML=`<div class="empty">${d.summary.groups?"Aucun groupe pour ce filtre.":"🎉 Aucun doublon trouvé avec cette rigueur."}</div>`;updBar();return}
+  if(!d.total){$("#res").innerHTML=`<div class="empty" style="font-size:18px">${d.summary.groups?"Aucun groupe pour ce filtre.":"🎉 Aucun doublon trouvé avec cette rigueur.<br><small class='muted'>Essayez une rigueur plus large ou vérifiez les modules cochés.</small>"}</div>`;updBar();return}
   let h=pager(d.total,d.page,d.per,"gp");
   for(const g of d.groups){
     g._subs=[...new Set(g.files.filter(f=>f.sub!=null).map(f=>f.sub))];

@@ -36,7 +36,7 @@ class Cancelled(Exception):
     pass
 
 
-def hash_file(path, partial=False, size=0):
+def hash_file(path, partial=False, size=0, should_stop=None):
     h = hashlib.sha256()
     with open(lp(path), "rb") as fh:
         if partial:
@@ -47,6 +47,8 @@ def hash_file(path, partial=False, size=0):
             h.update(str(size).encode())
         else:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
+                if should_stop and should_stop():   # annulation immédiate, même au milieu d'un gros fichier
+                    raise Cancelled()
                 h.update(chunk)
     return h.hexdigest()
 
@@ -225,8 +227,16 @@ class Scanner:
                 pending.add(ex.submit(fn, x))
             while pending:
                 done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                if self.cancel:
+                    for f in pending:
+                        f.cancel()                 # les tâches pas encore commencées sont abandonnées
                 for fut in done:
-                    results.append(fut.result())
+                    if fut.cancelled():
+                        continue
+                    try:
+                        results.append(fut.result())
+                    except Cancelled:
+                        continue
                     self.state["done"] += 1
                     if not self.cancel:
                         x = next(it, None)
@@ -267,7 +277,7 @@ class Scanner:
 
         def full(r):
             try:
-                return r["id"], hash_file(r["path"]), None
+                return r["id"], hash_file(r["path"], should_stop=lambda: self.cancel), None
             except OSError as e:
                 return r["id"], None, explain_oserror(e)
         res = self._pool(cand2, full, "Hash SHA-256 complet", "sha256", stats)
@@ -356,10 +366,17 @@ class Scanner:
         def work(task):
             r, need = task
             out = {"id": r["id"], "kind": r["kind"], "need": need}
+            if self.cancel:
+                out["error"] = None
+                out["cancelled"] = True
+                return out
             try:
                 if r["kind"] == "video":
                     t = time.perf_counter()
-                    info, sig, col = imaging.video_signature(r["path"], vn)
+                    info, sig, col = imaging.video_signature(r["path"], vn, should_stop=lambda: self.cancel)
+                    if self.cancel:            # signature incomplète : ne rien enregistrer, refaite au prochain passage
+                        out["cancelled"] = True
+                        return out
                     out.update(info=info, vsig=sig, vcol=col)
                     tick("vidéos", t)
                     return out
@@ -424,7 +441,12 @@ class Scanner:
             pending = {ex.submit(work, t) for t in [next(it) for _ in range(min(len(tasks), WORKERS * 3))]}
             while pending:
                 done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                if self.cancel:
+                    for f in pending:
+                        f.cancel()
                 for fut in done:
+                    if fut.cancelled():
+                        continue
                     buf.append(fut.result())
                     self.state["done"] += 1
                     if not self.cancel:
@@ -450,6 +472,8 @@ class Scanner:
         with self.db.wlock:
             c = self.db.conn()
             for o in buf:
+                if o.get("cancelled"):
+                    continue
                 fid = o["id"]
                 if o.get("error"):
                     c.execute("UPDATE files SET status='error', error=? WHERE id=?", (o["error"], fid))
