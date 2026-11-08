@@ -1,0 +1,19 @@
+# Modules optionnels (installés par lancer.bat / lancer.sh ; un échec n'empêche pas le lancement)
+
+# Recherche en langage naturel et scènes (CLIP ONNX) : lecture du tokenizer
+tokenizers>=0.15
+# Texte dans les images (OCR) : modèles inclus dans le paquet
+rapidocr-onnxruntime>=1.3
+# Mesure mémoire de tools/bench.py
+psutil
+# Tests automatiques
+pytest>=7
+
+# ---------------------------------------------------------------------------
+# Accélération GPU : remplacer onnxruntime par UNE des variantes ci-dessous
+# (pip uninstall onnxruntime, puis pip install ...)
+#   NVIDIA (CUDA 12 + cuDNN installés) :      onnxruntime-gpu
+#   Windows, toute carte DirectX 12 :         onnxruntime-directml
+# Remarque : rapidocr-onnxruntime peut réinstaller onnxruntime (CPU) ; dans ce cas
+# désinstallez-le à nouveau après coup. Vérifiez avec : python tools/selftest.py
+# ---------------------------------------------------------------------------
