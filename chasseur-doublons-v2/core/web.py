@@ -15,9 +15,9 @@ from flask import Flask, Response, abort, jsonify, request, send_file
 from PIL import Image, ImageOps
 
 from . import __version__, actions, calib, dupes, persons, search
-from .config import DATA_DIR, IMG_EXT, RIGOR_LABELS
+from .config import DATA_DIR, IMG_EXT, RIGOR_LABELS, WEB_EXT
 from .db import Database
-from .imaging import HEIF, cv2, load_small
+from .imaging import HEIF, RAW, cv2, load_small
 from .models import LICENSE_INSIGHTFACE, ModelManager, providers
 from .scanner import Scanner
 from .util import Scope, kind_of, lp, norm
@@ -39,6 +39,22 @@ class State:
         self.last_opts = {}
         self._clip = None
         self._clip_lock = threading.Lock()
+        self._face_engines = {}
+        self._face_lock = threading.Lock()
+        self.psearch_refs = {}        # jeton -> {"engine": str, "embs": [vecteurs]} (photos de référence envoyées)
+
+    def face_engine(self, name):
+        """Moteur de visages (chargé une fois) ; lève RuntimeError si le modèle manque."""
+        with self._face_lock:
+            if name not in self._face_engines:
+                from .faces import make_engine
+                if name == "insightface" and not self.mm.license_ok("insightface"):
+                    raise RuntimeError("Confirmez la licence InsightFace (Réglages) ou choisissez le moteur OpenCV.")
+                st = self.mm.status()
+                if not st["insightface" if name == "insightface" else "opencv_faces"]["available"]:
+                    raise RuntimeError("Modèle de visages absent : téléchargez-le dans Réglages.")
+                self._face_engines[name] = make_engine(self.mm, name)
+            return self._face_engines[name]
 
     def clip(self):
         with self._clip_lock:
@@ -55,6 +71,7 @@ def create_app(state=None):
     S = state or State()
     app = Flask(__name__, static_folder=None)
     app.config["STATE"] = S
+    app.config["MAX_CONTENT_LENGTH"] = 120 * 1024 * 1024
     static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 
     allowed_hosts = {"127.0.0.1", "localhost", "[::1]"}
@@ -84,7 +101,7 @@ def create_app(state=None):
     def caps():
         st = S.mm.status()
         return {
-            "video": cv2 is not None, "heif": HEIF,
+            "video": cv2 is not None, "heif": HEIF, "raw": RAW,
             "faces_insightface": st["insightface"]["available"], "faces_opencv": st["opencv_faces"]["available"],
             "objects": st["yolox_s"]["available"] or st["yolox_nano"]["available"],
             "clip": st["clip"]["available"] and importlib.util.find_spec("tokenizers") is not None,
@@ -211,7 +228,10 @@ def create_app(state=None):
     def api_group_ids():
         """Identifiants et métadonnées légères de tous les groupes (pour la sélection automatique)."""
         out = []
+        kind = request.args.get("kind", "all")
         for g in S.result.visible():
+            if kind != "all" and not (g["kind"] == kind or g["media"] == kind):
+                continue
             ids = [m["id"] for m in g["members"]]
             info = {r["id"]: dict(r) for r in S.db.q(
                 "SELECT id, size, mtime, w, h, length(path) pl, length(name) nl FROM files WHERE id IN (%s)"
@@ -261,7 +281,22 @@ def create_app(state=None):
     @app.get("/api/file")
     def api_file():
         r = file_row(int(request.args.get("id", 0)))
+        ext = os.path.splitext(r["path"])[1].lower()
+        if r["kind"] == "image" and ext not in WEB_EXT:
+            return converted_jpeg(r, 2560)        # HEIC, AVIF, TIFF, RAW... : le navigateur ne sait pas les afficher
         return send_file(lp(r["path"]), conditional=True)
+
+    def converted_jpeg(r, s):
+        key = hashlib.sha1(("%s|%s|%s|%s" % (norm(r["path"]), r["mtime"], r["size"], s)).encode()).hexdigest()
+        cf = os.path.join(S.thumbs, key[:2], key + ".jpg")
+        if not os.path.exists(cf):
+            im = load_small(r["path"], "image", s)
+            if im is None:
+                abort(415)
+            os.makedirs(os.path.dirname(cf), exist_ok=True)
+            im.save(cf + ".tmp", "JPEG", quality=90)
+            os.replace(cf + ".tmp", cf)
+        return send_file(cf, mimetype="image/jpeg", max_age=86400)
 
     def placeholder(label):
         svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#2a3040"/>'
@@ -452,8 +487,7 @@ def create_app(state=None):
     def api_face_assign():
         d = body()
         try:
-            for fid in d.get("ids", []):
-                persons.assign_face(S.db, int(fid), int(d["person"]))
+            persons.assign_faces(S.db, d.get("ids", []), int(d["person"]))
         except ValueError as e:
             return err(str(e))
         return jsonify(ok=True)
@@ -489,9 +523,165 @@ def create_app(state=None):
         res["files"] = [f for f in res["files"] if S.scope.contains(f["path"])]
         return jsonify(res)
 
+    def in_scope_ids(ids):
+        """Ne garde que les fichiers du périmètre de la session (même contrôle que /api/search)."""
+        out = []
+        for i in range(0, len(ids), 900):
+            ch = ids[i:i + 900]
+            ok = {r["id"] for r in S.db.q("SELECT id, path FROM files WHERE id IN (%s)" % ",".join("?" * len(ch)), ch)
+                  if S.scope.contains(r["path"])}
+            out += [x for x in ch if x in ok]
+        return out
+
+    @app.get("/api/search_ids")
+    def api_search_ids():
+        """Identifiants de TOUS les résultats d'une recherche (bouton « Tout sélectionner »), sans pagination."""
+        a = request.args
+        filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to")
+                   if a.get(k)}
+        res = search.search(S.db, a.get("q", ""), filters, 1, 1, S.clip() if a.get("q") else None, ids_only=True)
+        ids = in_scope_ids(res["ids"])
+        return jsonify(ids=ids[:100000], total=len(ids), truncated=len(ids) > 100000)
+
     @app.get("/api/facets")
     def api_facets():
         return jsonify(search.facets(S.db))
+
+    # ------------------------------------------------------------ recherche d'une personne (visage de référence)
+    def resolve_ref(d):
+        """(vecteur, moteur, personne_de_référence|None) depuis une personne, un visage indexé ou une photo envoyée."""
+        if d.get("person") not in (None, ""):
+            pid = int(d["person"])
+            p = S.db.one("SELECT engine FROM persons WHERE id=?", (pid,))
+            v = persons.person_reference(S.db, pid) if p else None
+            if v is None:
+                raise ValueError("Cette personne n'a aucun visage indexé.")
+            return v, p["engine"], pid
+        if d.get("face") not in (None, ""):
+            v, eng = persons.face_reference(S.db, int(d["face"]))
+            if v is None:
+                raise ValueError("Visage introuvable.")
+            return v, eng, None
+        ref = S.psearch_refs.get(d.get("ref"))
+        if ref is None:
+            raise ValueError("Photo de référence expirée : renvoyez-la.")
+        i = int(d.get("idx", 0))
+        if not 0 <= i < len(ref["embs"]):
+            raise ValueError("Visage de référence inconnu.")
+        return ref["embs"][i], ref["engine"], None
+
+    def run_match(d):
+        v, eng, ref_pid = resolve_ref(d)
+        thr = float(d.get("thr") or persons.threshold(S.db, eng))
+        m = persons.match_faces(S.db, eng, v, thr, bool(d.get("include_small")))
+        best = persons.best_per_file(m)
+        ok = set(in_scope_ids([b[0] for b in best]))
+        return [b for b in best if b[0] in ok], eng, ref_pid, thr, len(m)
+
+    @app.post("/api/psearch/detect")
+    def api_psearch_detect():
+        f = request.files.get("photo")
+        if not f or not f.filename:
+            return err("Aucune photo envoyée.")
+        ext = os.path.splitext(f.filename)[1].lower()
+        if ext not in IMG_EXT:
+            return err("Format non pris en charge : %s" % (ext or "?"))
+        eng_name = request.form.get("engine") or S.db.get_setting("face_engine", "opencv")
+        try:
+            eng = S.face_engine(eng_name)
+        except RuntimeError as e:
+            return err(str(e), 409)
+        import tempfile
+        from .imaging import decode
+        fd, tmp = tempfile.mkstemp(suffix=ext)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                f.save(fh)
+            dec = decode(tmp, 1600)
+            faces = eng.analyse(dec.bgr())
+        except Exception as e:  # noqa
+            return err("Photo illisible : %s" % e)
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        faces = [x for x in faces if x.get("emb") is not None]
+        faces.sort(key=lambda x: -(x["box"][2] - x["box"][0]) * (x["box"][3] - x["box"][1]))
+        faces = faces[:12]
+        if not faces:
+            return err("Aucun visage détecté sur cette photo.")
+        import base64
+        import io
+        out = []
+        for i, x in enumerate(faces):
+            x1, y1, x2, y2 = [int(v) for v in x["box"]]
+            m = int(0.25 * max(x2 - x1, y2 - y1))
+            crop = dec.rgb.crop((max(0, x1 - m), max(0, y1 - m), min(dec.rgb.size[0], x2 + m), min(dec.rgb.size[1], y2 + m)))
+            crop.thumbnail((128, 128))
+            buf = io.BytesIO()
+            crop.save(buf, "JPEG", quality=85)
+            out.append({"idx": i, "px": int(max(x2 - x1, y2 - y1)), "score": round(float(x["score"]), 3),
+                        "thumb": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()})
+        token = hashlib.sha1(os.urandom(16)).hexdigest()
+        if len(S.psearch_refs) > 20:
+            S.psearch_refs.pop(next(iter(S.psearch_refs)))
+        embs = [(x["emb"] / (float((x["emb"] ** 2).sum()) ** 0.5 + 1e-9)).astype("float32") for x in faces]
+        S.psearch_refs[token] = {"engine": eng_name, "embs": embs}
+        return jsonify(ref=token, engine=eng_name, faces=out, threshold=persons.threshold(S.db, eng_name))
+
+    @app.post("/api/psearch/run")
+    def api_psearch_run():
+        d = body()
+        try:
+            res, eng, ref_pid, thr, nfaces = run_match(d)
+        except ValueError as e:
+            return err(str(e))
+        if d.get("ids_only"):
+            return jsonify(ids=[r[0] for r in res], total=len(res))
+        page, per = max(1, int(d.get("page", 1))), min(200, int(d.get("per", 60)))
+        sl = res[(page - 1) * per: page * per]
+        h = search._hydrate(S.db, [r[0] for r in sl], len(res), page, per, {}, ["visage"])
+        names = {r["id"]: r["name"] for r in S.db.q("SELECT id, name FROM persons WHERE engine=?", (eng,))}
+        by_file = {r[0]: r for r in sl}
+        for f in h["files"]:
+            _, face_id, pid, sim = by_file[f["id"]]
+            f.update(sim=round(sim, 3), face_id=face_id, person_id=pid,
+                     person_name=(names.get(pid) or "Sans nom") if pid else None,
+                     known=bool(ref_pid and pid == ref_pid))
+        h.update(threshold=thr, engine=eng, matched_faces=nfaces,
+                 sims=[round(r[3], 3) for r in res[:3]])
+        return jsonify(h)
+
+    @app.post("/api/psearch/assign")
+    def api_psearch_assign():
+        """Affecte à une personne les visages trouvés (tous, ou ceux des photos données)."""
+        d = body()
+        try:
+            res, eng, ref_pid, thr, _ = run_match(d)
+        except ValueError as e:
+            return err(str(e))
+        target = d.get("to")
+        if d.get("new_name") is not None:
+            target = persons.create_person(S.db, eng, d["new_name"])
+        elif target in (None, ""):
+            target = ref_pid
+        if target in (None, ""):
+            return err("Choisissez la personne à laquelle affecter les visages.")
+        target = int(target)
+        only = set(int(i) for i in d["file_ids"]) if d.get("file_ids") else None
+        try:
+            n = persons.assign_faces(S.db, [face_id for file_id, face_id, pid, sim in res
+                                            if pid != target and (only is None or file_id in only)], target)
+        except ValueError as e:
+            return err(str(e))
+        return jsonify(assigned=n, person=target)
+
+    @app.post("/api/persons/create")
+    def api_person_create():
+        d = body()
+        eng = d.get("engine") or S.db.get_setting("face_engine", "opencv")
+        return jsonify(id=persons.create_person(S.db, eng, d.get("name", "")))
 
     # ------------------------------------------------------------ étalonnage
     @app.get("/api/calib/next")

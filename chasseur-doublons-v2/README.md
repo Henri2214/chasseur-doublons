@@ -75,6 +75,9 @@ modifiés (taille + date de modification) et purge les fichiers disparus.
   - date EXIF affichée sans décalage de fuseau ;
   - aperçu plein écran et lecture vidéo ;
   - sélection automatique (« garder la meilleure », la plus ancienne, la meilleure résolution…) ;
+  - **« Tout sélectionner »** : coche TOUTES les photos de tous les groupes (toutes les pages, référence incluse) ;
+    « Tout désélectionner » ; dans chaque groupe, « Tout cocher » en plus de « Tout cocher sauf la réf. ».
+    La suppression demande une confirmation si elle viderait un groupe ;
   - bandeau latéral des dossiers avec miniatures : glisser-déposer d'une miniature vers un dossier, avec
     bouton « Annuler ».
 - **Personnes** :
@@ -82,17 +85,38 @@ modifiés (taille + date de modification) et purge les fichiers disparus.
   - glisser un visage sur une personne pour l'y affecter ;
   - « Voir toutes ses photos » ouvre l'Explorer filtré ;
   - bouton **« Effacer tous les visages et personnes »**.
+- **Recherche de personne** (identification faciale) :
+  - choisir une personne déjà regroupée, ou **envoyer une photo de référence** (JPEG, PNG, HEIC, AVIF, RAW…) ;
+    si la photo contient plusieurs visages, on clique sur celui à chercher ; depuis l'onglet Personnes,
+    « Retrouver partout » et « Chercher avec le visage sélectionné » lancent la même recherche ;
+  - tous les visages indexés ressemblant à la référence sont retrouvés, même non rangés dans une personne ;
+    curseur de ressemblance minimale (cosinus ArcFace/SFace), option « petits visages / flous » ;
+  - résultats avec pourcentage de ressemblance, « Tout sélectionner » (toutes les pages), déplacer, supprimer,
+    et « Affecter les visages trouvés à… » (personne existante ou nouvelle) pour compléter les regroupements ;
+  - nécessite d'avoir analysé le dossier avec le module Visages, avec le même moteur (InsightFace ou OpenCV).
 - **Explorer** :
   - une seule zone de recherche qui combine CLIP, objets, texte OCR, noms de personnes, scènes et noms de
     fichiers ;
   - filtres : type, personne, objet, scène, flou, dossier, dates ;
-  - résultats paginés et actions groupées (déplacement en masse par glisser-déposer).
+  - résultats paginés et actions groupées (déplacement en masse par glisser-déposer) ;
+  - **« Tout sélectionner »** : coche tous les résultats de la recherche, sur toutes les pages.
   - Sans CLIP, la recherche fonctionne quand même avec les objets, l'OCR et les personnes.
 - **Étalonnage** : « ces deux photos sont-elles des doublons ? » et « est-ce la même personne ? ». Vos réponses
   ajustent les seuils ; une fausse détection pèse trois fois plus qu'un doublon manqué.
 - **Rapport** : fichiers ignorés avec leur cause, images/seconde par étape, durée de chaque phase.
 - **Journal** : toutes les suppressions, tous les déplacements et renommages, avec annulation des déplacements
   et renommages.
+
+## Formats d'images pris en charge
+
+JPEG, PNG, GIF, BMP, WebP, TIFF, JPEG 2000, TGA, **HEIC/HEIF/HIF** et **AVIF** (bibliothèque `pillow-heif`,
+installée par défaut), et **RAW** d'appareils photo : CR2, CR3, CRW, NEF, NRW, ARW, SR2, ORF, RW2, RAF, PEF,
+SRW, DNG, 3FR, IIQ, RWL, X3F… (bibliothèque optionnelle `rawpy` : aperçu JPEG intégré, sinon développement en
+demi-résolution). Chaque photo est décodée une fois ; les empreintes visuelles (pHash, 48 et 128 px), les
+visages, les objets et l'OCR sont donc calculés de la même façon pour tous les formats : un HEIC et son JPEG
+sont reconnus comme doublons. Les formats que le navigateur ne sait pas afficher (HEIC, AVIF, RAW, TIFF…) sont
+convertis en JPEG (mis en cache) pour l'aperçu plein écran. Si `pillow-heif` ou `rawpy` manque, le rapport
+indique la cause exacte du fichier ignoré.
 
 ## Sécurité des actions
 - La suppression est **définitive**, sans corbeille (choix assumé).
@@ -201,7 +225,13 @@ CD_MODELS_DIR=models CD_TEST_IMAGES=dossier_portraits python -m pytest tests/tes
     en rigueur stricte (seuil 0,28).
   - Le niveau « large » a accepté une « zone déplacée » sur un des trois jeux de test.
 - **Yeux fermés** : jamais testés sur une photo aux yeux fermés.
-- **Fichiers HEIC réels** et **vidéos réelles** (MOV/MP4 H.264/H.265) : seule une vidéo MJPEG synthétique a
+- **Fichiers RAW réels** : le décodage RAW (rawpy) n'a pas pu être essayé sur de vrais fichiers d'appareil
+  (seul le comportement sur fichier invalide est testé). HEIC et AVIF ont été testés (encodage puis analyse,
+  doublon HEIC/JPEG, recherche de personne avec une référence HEIC et le vrai modèle InsightFace) ; les HEIC
+  provenant d'un iPhone (HDR, photos « live », profils Display P3) n'ont pas été essayés.
+- **Recherche de personne** avec le moteur OpenCV (YuNet + SFace) : non testée ici (modèles inaccessibles) ;
+  lancez `python tools/selftest.py` sur votre PC.
+- **Vidéos réelles** (MOV/MP4 H.264/H.265) : seule une vidéo MJPEG synthétique a
   été testée ; le support dépend des codecs de la version d'OpenCV.
 - **Analyse complète de 100 000 images** : seule la recherche de candidats a été mesurée à cette échelle.
 - **Version non quantifiée de CLIP** : non prévue ; seuls les modèles `_quantized` sont gérés.

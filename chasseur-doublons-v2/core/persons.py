@@ -134,3 +134,110 @@ def list_persons(db, engine=None, page=1, per=60, q=""):
     unassigned = db.one("SELECT COUNT(*) n FROM faces WHERE person_id IS NULL" +
                         (" AND engine=?" if engine else ""), (engine,) if engine else ())["n"]
     return {"total": total, "unassigned": unassigned, "persons": [dict(r) for r in rows]}
+
+
+def create_person(db, engine, name):
+    """Crée une personne (nommée) sans visage ; sert à « Nouvelle personne » dans la recherche."""
+    name = (name or "").strip()
+    cur = db.x("INSERT INTO persons(name, engine, created) VALUES (?, ?, ?)", (name or None, engine, time.time()))
+    return cur.lastrowid if hasattr(cur, "lastrowid") else db.one("SELECT MAX(id) m FROM persons")["m"]
+
+
+# ------------------------------------------------------------------ recherche par visage de référence
+class FaceMatrix:
+    """Matrice des visages indexés d'un moteur (float32 normalisée), rechargée si l'index a changé."""
+
+    def __init__(self):
+        self.key = None
+        self.engine = None
+        self.ids = self.file_ids = self.person_ids = self.elig = self.E = None
+
+    def get(self, db, engine):
+        n = db.one("SELECT COUNT(*) n, COALESCE(MAX(id),0) m, COALESCE(SUM(person_id),0) s, COALESCE(SUM(locked),0) l "
+                   "FROM faces WHERE engine=?", (engine,))
+        key = (engine, n["n"], n["m"], n["s"], n["l"])
+        if key != self.key:
+            rows = db.q("SELECT id, file_id, person_id, eligible, emb FROM faces WHERE engine=?", (engine,))
+            self.ids = np.array([r["id"] for r in rows], dtype=np.int64)
+            self.file_ids = np.array([r["file_id"] for r in rows], dtype=np.int64)
+            self.person_ids = np.array([r["person_id"] if r["person_id"] is not None else -1 for r in rows], dtype=np.int64)
+            self.elig = np.array([bool(r["eligible"]) for r in rows])
+            if rows:
+                E = np.stack([from_f16(r["emb"]) for r in rows]).astype(np.float32)
+                E /= np.linalg.norm(E, axis=1, keepdims=True) + 1e-9
+            else:
+                E = np.zeros((0, 512), np.float32)
+            self.E, self.key = E, key
+        return self
+
+
+FACE_MATRIX = FaceMatrix()
+
+
+def person_reference(db, pid):
+    """Vecteur de référence d'une personne : moyenne de ses visages (confirmés d'abord, sinon éligibles)."""
+    rows = db.q("SELECT emb, locked FROM faces WHERE person_id=? AND (locked=1 OR eligible=1)", (pid,))
+    if not rows:
+        rows = db.q("SELECT emb, locked FROM faces WHERE person_id=?", (pid,))
+    if not rows:
+        return None
+    lk = [r for r in rows if r["locked"]]
+    use = lk if len(lk) >= 3 else rows
+    v = np.stack([from_f16(r["emb"]) for r in use]).astype(np.float32).mean(0)
+    return v / (np.linalg.norm(v) + 1e-9)
+
+
+def face_reference(db, face_id):
+    r = db.one("SELECT emb, engine FROM faces WHERE id=?", (face_id,))
+    if not r:
+        return None, None
+    v = from_f16(r["emb"]).astype(np.float32)
+    return v / (np.linalg.norm(v) + 1e-9), r["engine"]
+
+
+def match_faces(db, engine, ref, thr, include_small=False, exclude_person=None):
+    """Tous les visages dont la similarité cosinus avec `ref` est >= thr.
+    Retourne une liste de (face_id, file_id, person_id|None, similarité) triée par similarité décroissante."""
+    M = FACE_MATRIX.get(db, engine)
+    if not len(M.ids):
+        return []
+    sim = M.E @ np.asarray(ref, np.float32)
+    ok = sim >= thr
+    if not include_small:
+        ok &= M.elig | (M.person_ids >= 0)
+    if exclude_person is not None:
+        ok &= M.person_ids != exclude_person
+    idx = np.nonzero(ok)[0]
+    idx = idx[np.argsort(-sim[idx])]
+    return [(int(M.ids[i]), int(M.file_ids[i]), int(M.person_ids[i]) if M.person_ids[i] >= 0 else None,
+             float(sim[i])) for i in idx]
+
+
+def best_per_file(matches):
+    """Un résultat par photo : le visage le plus ressemblant. -> liste (file_id, face_id, person_id, sim)."""
+    seen, out = set(), []
+    for fid, file_id, pid, s in matches:
+        if file_id in seen:
+            continue
+        seen.add(file_id)
+        out.append((file_id, fid, pid, s))
+    return out
+
+
+def assign_faces(db, face_ids, pid):
+    """Affectation (et verrouillage) en lot : un seul recalcul des centroïdes. Retourne le nombre de visages affectés."""
+    p = db.one("SELECT engine FROM persons WHERE id=?", (pid,))
+    if not p:
+        raise ValueError("Personne introuvable")
+    ids = [int(i) for i in face_ids]
+    n = 0
+    with db.wlock:
+        c = db.conn()
+        for i in range(0, len(ids), 800):
+            ch = ids[i:i + 800]
+            cur = c.execute("UPDATE faces SET person_id=?, locked=1 WHERE engine=? AND id IN (%s)" % ",".join("?" * len(ch)),
+                            (pid, p["engine"], *ch))
+            n += cur.rowcount
+        c.commit()
+    refresh_persons(db, p["engine"])
+    return n
