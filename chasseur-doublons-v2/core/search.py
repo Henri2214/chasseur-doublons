@@ -91,7 +91,7 @@ class ClipIndex:
 CLIP_INDEX = ClipIndex()
 
 
-def search(db, q="", filters=None, page=1, per=60, clip_model=None):
+def search(db, q="", filters=None, page=1, per=60, clip_model=None, ids_only=False):
     f = filters or {}
     where, args = ["f.status='ok'"], []
     if f.get("kind") in ("image", "video", "other"):
@@ -127,6 +127,9 @@ def search(db, q="", filters=None, page=1, per=60, clip_model=None):
     q = (q or "").strip()
     used = []
     if not q:
+        if ids_only:
+            return {"ids": [r["id"] for r in db.q("SELECT f.id FROM files f WHERE " + W +
+                                                  " ORDER BY COALESCE(f.taken, f.mtime) DESC", args)]}
         total = db.one("SELECT COUNT(*) n FROM files f WHERE " + W, args)["n"]
         rows = db.q("SELECT f.id FROM files f WHERE " + W + " ORDER BY COALESCE(f.taken, f.mtime) DESC LIMIT ? OFFSET ?",
                     (*args, per, (page - 1) * per))
@@ -202,6 +205,8 @@ def search(db, q="", filters=None, page=1, per=60, clip_model=None):
                 used.append("CLIP")
     order = sorted(score, key=lambda i: -score[i])
     total = len(order)
+    if ids_only:
+        return {"ids": order}
     sl_ids = order[(page - 1) * per: page * per]
     return _hydrate(db, sl_ids, total, page, per, score, used)
 

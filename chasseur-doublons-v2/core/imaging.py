@@ -1,11 +1,13 @@
 """Décodage unique des images, EXIF, empreintes visuelles (pHash, 48 px, 128 px), netteté, vidéos."""
 import calendar
+import io
+import os
 import time
 
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from .config import DECODE_MAX, SIG_MAX
+from .config import DECODE_MAX, HEIF_EXT, RAW_EXT, SIG_MAX
 from .util import lp
 
 try:
@@ -19,6 +21,13 @@ try:  # HEIC/HEIF (photos iPhone) si pillow-heif est installé
     HEIF = True
 except Exception:
     HEIF = False
+
+try:  # RAW (CR2, NEF, ARW, DNG...) si rawpy est installé
+    import rawpy
+    RAW = True
+except Exception:
+    rawpy = None
+    RAW = False
 
 Image.MAX_IMAGE_PIXELS = 300_000_000   # protège contre les images démesurées (bombes de décompression)
 
@@ -89,8 +98,43 @@ def flatten(im):
     return im.convert("RGB")
 
 
+def _decode_raw(path, maxside):
+    """RAW : aperçu JPEG intégré s'il est assez grand, sinon développement en demi-résolution."""
+    if rawpy is None:
+        raise RuntimeError("format RAW : installez rawpy (pip install rawpy)")
+    with rawpy.imread(lp(path)) as raw:
+        sizes = raw.sizes
+        w, h = sizes.width, sizes.height
+        im, exif = None, (None, "", False)
+        try:
+            th = raw.extract_thumb()
+            if th.format == rawpy.ThumbFormat.JPEG:
+                t = Image.open(io.BytesIO(th.data))
+                exif = exif_info(t)
+                if max(t.size) >= min(maxside, 1024):
+                    t.draft("RGB", (maxside, maxside))
+                    im = ImageOps.exif_transpose(t)
+                    # la miniature intégrée est souvent déjà tournée ; sinon on garde la géométrie du capteur
+            elif th.format == rawpy.ThumbFormat.BITMAP:
+                im = Image.fromarray(th.data)
+        except Exception:
+            im = None
+        if im is None:
+            arr = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=False, output_bps=8)
+            im = Image.fromarray(arr)
+        if im.size[0] and (im.size[0] > im.size[1]) != (w > h) and not (w == h):
+            w, h = h, w
+        im.thumbnail((maxside, maxside))
+        return Decoded(flatten(im), w, h, exif[0], exif[1], exif[2], "RAW")
+
+
 def decode(path, maxside=DECODE_MAX):
     """Ouvre l'image UNE fois (draft JPEG, rotation EXIF) et lit l'EXIF. Lève une exception si illisible."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in RAW_EXT:
+        return _decode_raw(path, maxside)
+    if ext in HEIF_EXT and not HEIF:
+        raise RuntimeError("format HEIC/HEIF/AVIF : installez pillow-heif (pip install pillow-heif)")
     with Image.open(lp(path)) as im:
         fmt = im.format or ""
         w, h = im.size

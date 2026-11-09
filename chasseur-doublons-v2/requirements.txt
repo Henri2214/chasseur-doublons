@@ -4,5 +4,5 @@ pillow>=10.0
 numpy>=1.24
 opencv-python-headless>=4.8
 onnxruntime>=1.16
-# Photos iPhone (HEIC/HEIF)
+# Photos iPhone et formats modernes (HEIC, HEIF, AVIF)
 pillow-heif

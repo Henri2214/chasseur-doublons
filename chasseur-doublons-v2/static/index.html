@@ -138,7 +138,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
   <div class="prog" id="progw" style="display:none"><div id="pb"></div></div>
   <div id="phase"></div>
   <nav id="tabs">
-    <button data-t="dup" class="on">Doublons</button><button data-t="per">Personnes</button><button data-t="exp">Explorer</button>
+    <button data-t="dup" class="on">Doublons</button><button data-t="per">Personnes</button><button data-t="exp">Explorer</button><button data-t="ps">Recherche de personne</button>
     <button data-t="cal">Étalonnage</button><button data-t="rep">Rapport</button><button data-t="jou">Journal</button><button data-t="set">Réglages</button>
   </nav>
 </header>
@@ -157,6 +157,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <select id="f_kind"><option value="all">Tous</option><option value="exact">Identiques</option><option value="visuel">Similaires</option><option value="image">Images</option><option value="video">Vidéos</option><option value="other">Autres</option></select>
     <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option></select>
     <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures">
+    <button id="selall" title="Coche TOUTES les photos de tous les groupes affichés (toutes les pages), y compris la référence">Tout sélectionner</button><button id="selnone">Tout désélectionner</button>
     <select id="f_auto"><option value="">Sélection auto…</option><option value="best">Garder la meilleure (netteté, résolution, yeux ouverts)</option><option value="oldest">Garder le plus ancien</option><option value="newest">Garder le plus récent</option><option value="biggest">Garder le plus lourd</option><option value="res">Garder la meilleure résolution</option><option value="shortpath">Garder le chemin le plus court</option><option value="none">Tout désélectionner</option></select>
     <button id="mv" disabled>Déplacer…</button><button id="rm" class="bad" disabled>Supprimer</button>
   </div>
@@ -184,10 +185,38 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <input type="text" id="xfolder" placeholder="Dossier" style="width:200px">
     <label class="opt">du <input type="date" id="xfrom"></label><label class="opt">au <input type="date" id="xto"></label>
     <span style="flex:1"></span><span class="muted" id="xsrc"></span>
+    <button id="xall" title="Coche TOUS les résultats de la recherche (toutes les pages)">Tout sélectionner</button><button id="xnone">Tout désélectionner</button>
     <button id="xmv" disabled>Déplacer…</button><button id="xrm" class="bad" disabled>Supprimer</button>
   </div>
   <div id="xres" class="grid" style="padding:0"></div>
   <div class="pager" id="xpager"></div>
+</section>
+
+<!-- ============ RECHERCHE DE PERSONNE ============ -->
+<section class="tab" id="t_ps">
+  <div class="panel"><h3>Retrouver une personne dans les photos indexées</h3>
+    <p class="muted">Identification faciale : choisissez une personne déjà regroupée, ou envoyez une photo de référence (HEIC, JPEG, PNG, RAW…). Le programme cherche tous les visages qui lui ressemblent, même ceux qui n'ont pas encore été rangés dans une personne. Les résultats se limitent au dossier analysé.</p>
+    <div class="row">
+      <label class="opt"><b>Personne</b> <select id="ps_person"><option value="">— choisir —</option></select></label>
+      <span class="muted">ou</span>
+      <label class="opt"><b>Photo de référence</b> <input type="file" id="ps_file" accept="image/*,.heic,.heif,.hif,.avif,.dng,.cr2,.cr3,.nef,.arw,.orf,.rw2,.raf"></label>
+      <span id="ps_ref" class="muted"></span>
+    </div>
+    <div id="ps_faces" class="row" style="gap:8px"></div>
+    <div class="row">
+      <label class="opt" title="Plus bas : plus de résultats mais plus d'erreurs. Plus haut : résultats sûrs, quelques absents.">Ressemblance minimale <input type="range" id="ps_thr" min="0.20" max="0.80" step="0.01" value="0.45" style="width:200px"> <b id="ps_thr_v">0,45</b></label>
+      <label class="opt"><input type="checkbox" id="ps_small">inclure les petits visages / flous</label>
+      <button id="ps_go" class="pri">Rechercher</button><span class="muted" id="ps_info"></span>
+    </div>
+  </div>
+  <div class="row" id="ps_bar" style="display:none">
+    <button id="ps_all">Tout sélectionner</button><button id="ps_none">Tout désélectionner</button>
+    <select id="ps_to"><option value="">Affecter les visages trouvés à…</option></select>
+    <span style="flex:1"></span>
+    <button id="ps_mv" disabled>Déplacer…</button><button id="ps_rm" class="bad" disabled>Supprimer</button>
+  </div>
+  <div id="ps_res" class="grid" style="padding:0"></div>
+  <div class="pager" id="ps_pager"></div>
 </section>
 
 <!-- ============ ÉTALONNAGE ============ -->
@@ -239,14 +268,14 @@ const fmtSize=b=>{const u=["o","Ko","Mo","Go","To"];let i=0;while(b>=1024&&i<4){
 const fmtDate=(t,utc)=>new Date(t*1000).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"medium",...(utc?{timeZone:"UTC"}:{})});
 const fmtDur=s=>{s=Math.round(s);const m=Math.floor(s/60);return m+":"+String(s%60).padStart(2,"0")};
 const dirOf=p=>p.replace(/[\\/][^\\/]*$/,"");
-let CAPS={},SET={},sel=new Set(),xsel=new Set(),byId={},pollT=null,curTab="dup";
+let CAPS={},SET={},sel=new Set(),xsel=new Set(),psel=new Set(),byId={},pollT=null,curTab="dup";
 const COLORS=["#4c8dff","#3ecf8e","#f5a524","#c77dff","#ff7a90","#2ec4b6"];
 
 // ---------------------------------------------------------------- onglets
 $("#tabs").onclick=e=>{const b=e.target.closest("[data-t]");if(!b)return;showTab(b.dataset.t)};
 function showTab(t){curTab=t;document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x.dataset.t===t));
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.id==="t_"+t));
-  ({per:loadPersons,exp:()=>{loadFacets();if(!$("#xres").innerHTML)xsearch(1)},cal:calNext,rep:loadReport,jou:loadJournal,set:loadSettings}[t]||(()=>{}))();setTop()}
+  ({ps:psInit,per:loadPersons,exp:()=>{loadFacets();if(!$("#xres").innerHTML)xsearch(1)},cal:calNext,rep:loadReport,jou:loadJournal,set:loadSettings}[t]||(()=>{}))();setTop()}
 
 // ---------------------------------------------------------------- capacités
 async function loadCaps(){
@@ -329,6 +358,7 @@ $("#f_size").oninput=()=>document.documentElement.style.setProperty("--w",$("#f_
 function cardHtml(f,g,selset){
   const dim=f.w&&f.h?` · ${f.w}×${f.h}`:"";let tags="";
   if(g&&g.kind==="visuel")tags+=f.ref?`<span class="tag" style="background:#3ecf8e">réf.</span>`:(f.score!=null?`<span class="tag" style="background:${f.score>=98?"#3ecf8e":f.score>=94?"#f5a524":"#ef5b5b"}" title="Similarité avec la référence">${f.score} %</span>`:"");
+  if(f.sim!=null)tags+=`<span class="tag" style="background:${f.sim>=0.6?"#3ecf8e":f.sim>=0.45?"#f5a524":"#ef5b5b"}" title="Ressemblance du visage avec la référence (cosinus ${f.sim})">${Math.round(f.sim*100)} %</span>`+(f.person_name&&!f.known?`<span class="tag" style="background:#4c8dff" title="Visage déjà rangé dans cette personne">${esc(f.person_name)}</span>`:"");
   if(f.best)tags+=`<span class="tag" style="background:#ffd166" title="Meilleure photo du groupe (netteté, résolution, yeux ouverts) – score ${f.quality}">★ meilleure</span>`;
   if(f.closed_eyes)tags+=`<span class="tag" style="background:#ff9f80" title="Yeux probablement fermés">yeux fermés</span>`;
   if(g&&f.sub!=null&&g.kind==="visuel"){const ci=g._subs.indexOf(f.sub);tags+=`<span class="tag" style="background:${COLORS[ci%COLORS.length]}" title="Identique bit à bit aux fichiers de même couleur">=</span>`}
@@ -352,7 +382,7 @@ function renderGroups(){
     h+=`<section class="group"><div class="ghead"><span class="badge b-${g.kind}">${g.kind==="exact"?"IDENTIQUES":"SIMILAIRES"}</span>
       ${g.nodate?`<span class="badge b-warn" title="Au moins une photo sans date EXIF : le contrôle de date a été ignoré. Vérifiez avant de supprimer.">date non vérifiée</span>`:""}
       <b>${g.files.length} fichiers</b><small>récupérable : ${fmtSize(g.waste)}</small><span class="sp"></span>
-      <button data-act="gbest" data-g="${g.id}">Garder la meilleure</button><button data-act="gall" data-g="${g.id}">Tout cocher sauf la réf.</button></div><div class="grid">`;
+      <button data-act="gbest" data-g="${g.id}">Garder la meilleure</button><button data-act="gall" data-g="${g.id}">Tout cocher sauf la réf.</button><button data-act="gfull" data-g="${g.id}" title="Coche toutes les photos de ce groupe">Tout cocher</button></div><div class="grid">`;
     for(const f of g.files)h+=cardHtml(f,g,sel);
     h+="</div></section>";
   }
@@ -363,6 +393,7 @@ function pager(total,p,per,key){const n=Math.ceil(total/per);if(n<=1)return"";
   return `<div class="pager"><button data-pg="${key}" data-p="${p-1}" ${p<=1?"disabled":""}>◀</button><span>page ${p} / ${n} (${total})</span><button data-pg="${key}" data-p="${p+1}" ${p>=n?"disabled":""}>▶</button></div>`}
 function updBar(){
   $("#rm").disabled=$("#mv").disabled=!sel.size;$("#rm").textContent=sel.size?`Supprimer (${sel.size})`:"Supprimer";
+  $("#ps_rm").disabled=$("#ps_mv").disabled=!psel.size;$("#ps_rm").textContent=psel.size?`Supprimer (${psel.size})`:"Supprimer";
   $("#xrm").disabled=$("#xmv").disabled=!xsel.size;$("#xrm").textContent=xsel.size?`Supprimer (${xsel.size})`:"Supprimer";
 }
 $("#f_auto").onchange=async e=>{
@@ -373,15 +404,21 @@ $("#f_auto").onchange=async e=>{
   for(const g of r.groups){let keep=g.members[0];for(const f of g.members)if(sc[m](f)>sc[m](keep))keep=f;g.members.forEach(f=>f===keep?sel.delete(f.id):sel.add(f.id))}
   renderGroups();toast(`${sel.size} fichier(s) sélectionné(s) dans ${r.groups.length} groupe(s)`);
 };
+$("#selall").onclick=async()=>{
+  try{const r=await api("/api/group_ids?kind="+$("#f_kind").value);let n=0;
+    r.groups.forEach(g=>g.members.forEach(f=>{sel.add(f.id);n++}));renderGroups();
+    toast(`${n} fichier(s) sélectionné(s) dans ${r.groups.length} groupe(s) — toutes les pages, référence incluse. La suppression demandera confirmation si un groupe serait vidé.`)}catch(e){toast(e.message,1)}};
+$("#selnone").onclick=()=>{sel.clear();renderGroups()};
 document.addEventListener("click",async e=>{
   const pg=e.target.closest("[data-pg]");
-  if(pg){const p=+pg.dataset.p;if(pg.dataset.pg==="gp"){page=p;loadGroups();scrollTo(0,0)}else if(pg.dataset.pg==="xp"){xsearch(p)}else if(pg.dataset.pg==="pp"){ppage=p;loadPersons()}return}
+  if(pg){const p=+pg.dataset.p;if(pg.dataset.pg==="gp"){page=p;loadGroups();scrollTo(0,0)}else if(pg.dataset.pg==="xp"){xsearch(p)}else if(pg.dataset.pg==="pp"){ppage=p;loadPersons()}else if(pg.dataset.pg==="psp"){psRun(p)}return}
 });
 $("#res").addEventListener("click",async e=>{
   const el=e.target.closest("[data-act]");if(!el)return;
   const act=el.dataset.act,card=el.closest(".card"),f=card?byId[card.dataset.id]:null;
   if(act==="sel"){toggleSel(sel,f.id,card,el)}
   else if(act==="view")view(f);
+  else if(act==="gfull"){const g=gdata.groups.find(g=>g.id==el.dataset.g);g.files.forEach(x=>sel.add(x.id));renderGroups()}
   else if(act==="gall"||act==="gbest"){const g=gdata.groups.find(g=>g.id==el.dataset.g);const keep=act==="gbest"?(g.files.find(x=>x.best)||g.files[0]):(g.files.find(x=>x.ref)||g.files[0]);
     g.files.forEach(x=>x===keep?sel.delete(x.id):sel.add(x.id));renderGroups()}
   else if(act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}
@@ -419,7 +456,7 @@ async function doDelete(ids,allow_last=false){
     }
     toast(`${r.deleted} fichier(s) supprimé(s) — ${fmtSize(r.freed)} libérés`);
     r.errors.forEach(x=>toast("#"+x.id+" : "+x.error,1));
-    (r.ids||[]).forEach(i=>{sel.delete(i);xsel.delete(i)});refreshAll();
+    (r.ids||[]).forEach(i=>{sel.delete(i);xsel.delete(i);psel.delete(i)});refreshAll();
   }catch(e){toast(e.message,1)}
 }
 $("#rm").onclick=()=>{if(confirm(`Supprimer DÉFINITIVEMENT ${sel.size} fichier(s) ?\nAucune corbeille : action irréversible.`))doDelete([...sel])};
@@ -430,7 +467,7 @@ async function moveTo(dest,ids){
   if(!ids.length)return;
   try{
     const r=await api("/api/move",{ids,dest});
-    r.moves.forEach(m=>{sel.delete(m.id);xsel.delete(m.id)});
+    r.moves.forEach(m=>{sel.delete(m.id);xsel.delete(m.id);psel.delete(m.id)});
     if(r.moved)toast(`${r.moved} fichier(s) déplacé(s) vers ${dest}`,false,{label:"Annuler",fn:()=>undo(r.moves.map(m=>m.journal))});
     r.errors.forEach(x=>toast("#"+x.id+" : "+x.error,1));refreshAll();refreshTree();
   }catch(e){toast(e.message,1)}
@@ -438,7 +475,7 @@ async function moveTo(dest,ids){
 async function undo(journal){
   try{const r=await api("/api/undo",{journal});toast(`${r.undone} action(s) annulée(s)`);r.errors.forEach(x=>toast(x.error,1));refreshAll();refreshTree()}catch(e){toast(e.message,1)}
 }
-function refreshAll(){if(gdata)loadGroups();if($("#xres").innerHTML)xsearch(xpage);if(curTab==="jou")loadJournal();updBar()}
+function refreshAll(){if(gdata)loadGroups();if($("#xres").innerHTML)xsearch(xpage);if(psRef&&$("#ps_res").innerHTML)psRun(pspage);if(curTab==="jou")loadJournal();updBar()}
 
 // ---------------------------------------------------------------- bandeau de dossiers + glisser-déposer
 let scanRoot="",treeRoot="",tree={},ver=0,dragIds=[],hoverP=null,hoverT=0;
@@ -462,8 +499,8 @@ function dragStart(e,set){const c=e.target.closest(".card");if(!c)return;const i
   e.dataTransfer.setData("text/plain",String(dragIds.length));e.dataTransfer.effectAllowed="move";document.body.classList.add("dragging");
   const im=c.querySelector("img");if(im)e.dataTransfer.setDragImage(im,40,40)}
 function dragEnd(){document.body.classList.remove("dragging");dragIds=[];clearTimeout(hoverT);document.querySelectorAll(".over").forEach(x=>x.classList.remove("over"))}
-$("#res").addEventListener("dragstart",e=>dragStart(e,sel));$("#xres").addEventListener("dragstart",e=>dragStart(e,xsel));
-["#res","#xres"].forEach(s=>$(s).addEventListener("dragend",dragEnd));
+$("#res").addEventListener("dragstart",e=>dragStart(e,sel));$("#xres").addEventListener("dragstart",e=>dragStart(e,xsel));$("#ps_res").addEventListener("dragstart",e=>dragStart(e,psel));
+["#res","#xres","#ps_res"].forEach(s=>$(s).addEventListener("dragend",dragEnd));
 $("#side").addEventListener("dragover",e=>{const n=e.target.closest("[data-dir]");if(!n||!dragIds.length)return;e.preventDefault();e.dataTransfer.dropEffect="move";
   if(!n.classList.contains("over")){document.querySelectorAll(".tn.over").forEach(x=>x.classList.remove("over"));n.classList.add("over")}
   const p=n.dataset.dir;if(hoverP!==p){hoverP=p;clearTimeout(hoverT);hoverT=setTimeout(()=>{if(!(tree[p]&&tree[p].open))toggleDir(p,true)},700)}});
@@ -491,13 +528,15 @@ async function openPerson(pid){
   const name=pid==="none"?"Visages non assignés":(document.querySelector(`[data-pid="${pid}"] .pn`)?.textContent||"");
   $("#pdetail").style.display="block";
   $("#pdetail").innerHTML=`<div class="row"><h3 style="margin:0">${esc(name)}</h3><span class="muted">${r.faces.length} visage(s) — cliquez pour sélectionner, glissez sur une personne pour l'y affecter</span><span style="flex:1"></span>
-    ${pid!=="none"?`<button id="prn">Renommer</button><button id="pall">Voir toutes ses photos</button>
+    ${pid!=="none"?`<button id="prn">Renommer</button><button id="pall">Voir toutes ses photos</button><button id="psrch" title="Cherche aussi les visages non encore rangés dans cette personne">🔎 Retrouver partout</button>
     <select id="pmerge"><option value="">Fusionner dans…</option>${others.map(p=>`<option value="${p.id}">${esc(p.name||"Sans nom #"+p.id)}</option>`).join("")}</select>
     <button id="pconf">Confirmer la sélection</button><button id="prem">Retirer la sélection</button>`:`<select id="passign"><option value="">Affecter la sélection à…</option>${others.map(p=>`<option value="${p.id}">${esc(p.name||"Sans nom #"+p.id)}</option>`).join("")}</select>`}
-    <button id="pclose">Fermer</button></div>
+    <button id="pfs" title="Sélectionnez UN visage puis cliquez">🔎 Chercher avec le visage sélectionné</button><button id="pclose">Fermer</button></div>
     <div class="fgrid" id="pfaces">${r.faces.map(f=>`<div class="face" draggable="true" data-fid="${f.id}" data-file="${f.file_id}" title="${f.eligible?"":"visage trop petit ou flou"}"><img loading="lazy" src="/api/facethumb?id=${f.id}">${f.locked?'<span class="lk">✔</span>':""}</div>`).join("")}</div>`;
   $("#pclose").onclick=()=>{$("#pdetail").style.display="none";curPerson=null};
   if($("#prn"))$("#prn").onclick=async()=>{const n=prompt("Nom de la personne :",name==="Sans nom"?"":name);if(n==null)return;await api("/api/persons/rename",{id:+pid,name:n});loadPersons();openPerson(pid)};
+  $("#pfs").onclick=async()=>{if(fsel.size!==1)return toast("Sélectionnez un seul visage.",1);const fid=[...fsel][0];showTab("ps");await psInit();$("#ps_person").value="";$("#ps_file").value="";$("#ps_faces").innerHTML="";psSet({face:fid},"Visage de référence choisi dans Personnes")};
+  if($("#psrch"))$("#psrch").onclick=async()=>{showTab("ps");await psInit();$("#ps_person").value=pid;$("#ps_file").value="";$("#ps_faces").innerHTML="";psSet({person:+pid},"")};
   if($("#pall"))$("#pall").onclick=()=>{showTab("exp");$("#xperson").value=pid;xsearch(1)};
   if($("#pmerge"))$("#pmerge").onchange=async e=>{const d=e.target.value;if(!d||!confirm("Fusionner cette personne dans l'autre ?"))return;await api("/api/persons/merge",{src:+pid,dst:+d});$("#pdetail").style.display="none";loadPersons()};
   if($("#pconf"))$("#pconf").onclick=async()=>{await api("/api/faces/confirm",{ids:[...fsel]});openPerson(pid)};
@@ -520,11 +559,18 @@ let xpage=1,xdata=null;
 async function loadFacets(){try{const r=await api("/api/facets");
   const fill=(id,items,lab,val)=>{const s=$("#"+id),cur=s.value,first=s.options[0].outerHTML;s.innerHTML=first+items.map(x=>`<option value="${esc(val(x))}">${esc(lab(x))}</option>`).join("");s.value=cur};
   fill("xperson",r.persons,x=>x.name,x=>x.id);fill("xobject",r.objects,x=>`${x.label} (${x.n})`,x=>x.label);fill("xscene",r.scenes,x=>`${x.label} (${x.n})`,x=>x.label)}catch(e){}}
-async function xsearch(p){
-  xpage=p||1;const q=new URLSearchParams({q:$("#xq").value,page:xpage,per:60});
+function xquery(extra){
+  const q=new URLSearchParams({q:$("#xq").value,...extra});
   for(const [k,id] of [["kind","xkind"],["person","xperson"],["object","xobject"],["scene","xscene"],["blur","xblur"],["folder","xfolder"]])if($("#"+id).value)q.set(k,$("#"+id).value);
   if($("#xfrom").value)q.set("date_from",Date.parse($("#xfrom").value+"T00:00:00Z")/1000);
   if($("#xto").value)q.set("date_to",Date.parse($("#xto").value+"T23:59:59Z")/1000);
+  return q}
+$("#xall").onclick=async()=>{try{const r=await api("/api/search_ids?"+xquery({}));r.ids.forEach(i=>xsel.add(i));
+  document.querySelectorAll("#xres .card").forEach(c=>{if(xsel.has(+c.dataset.id)){c.classList.add("sel");const i=c.querySelector("input");if(i)i.checked=true}});updBar();
+  toast(`${r.ids.length} fichier(s) sélectionné(s) (toutes les pages)`+(r.truncated?" — limité à 100 000":""))}catch(e){toast(e.message,1)}};
+$("#xnone").onclick=()=>{xsel.clear();document.querySelectorAll("#xres .card.sel").forEach(c=>{c.classList.remove("sel");const i=c.querySelector("input");if(i)i.checked=false});updBar()};
+async function xsearch(p){
+  xpage=p||1;const q=xquery({page:xpage,per:60});
   try{xdata=await api("/api/search?"+q);xdata.files.forEach(f=>byId[f.id]=f);
     $("#xsrc").textContent=xdata.sources.length?"sources : "+xdata.sources.join(", "):"";
     $("#xres").innerHTML=xdata.files.length?xdata.files.map(f=>cardHtml(f,null,xsel)).join(""):'<div class="empty" style="grid-column:1/-1">Aucun résultat (lancez d\'abord une analyse du dossier pour ouvrir la session).</div>';
@@ -535,6 +581,57 @@ $("#xgo").onclick=()=>xsearch(1);$("#xq").onkeydown=e=>{if(e.key==="Enter")xsear
 $("#xres").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const card=el.closest(".card"),f=byId[card.dataset.id];
   if(el.dataset.act==="sel")toggleSel(xsel,f.id,card,el);else if(el.dataset.act==="view")view(f);
   else if(el.dataset.act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}else if(el.dataset.act==="ren")doRename(f)});
+
+// ---------------------------------------------------------------- recherche de personne (identification faciale)
+let psRef=null,pspage=1,psdata=null;
+async function psInit(){
+  try{const r=await api("/api/persons?per=200");
+    const opts=r.persons.map(p=>`<option value="${p.id}">${esc(p.name||"Sans nom #"+p.id)} (${p.photos} photo(s))</option>`).join("");
+    const cur=$("#ps_person").value;$("#ps_person").innerHTML='<option value="">— choisir —</option>'+opts;$("#ps_person").value=cur;
+    $("#ps_to").innerHTML='<option value="">Affecter les visages trouvés à…</option><option value="__new">➕ Nouvelle personne…</option>'+opts}catch(e){}
+  if(!psRef)$("#ps_thr").value=SET.face_engine==="insightface"?SET.person_thr_insightface:SET.person_thr_opencv;$("#ps_thr_v").textContent=(+$("#ps_thr").value).toFixed(2).replace(".",",");
+}
+function psSet(ref,label){psRef=ref;$("#ps_ref").textContent=label||"";pspage=1;psRun(1)}
+$("#ps_person").onchange=e=>{if(!e.target.value)return;$("#ps_file").value="";$("#ps_faces").innerHTML="";psSet({person:+e.target.value},"")};
+$("#ps_file").onchange=async e=>{const f=e.target.files[0];if(!f)return;$("#ps_person").value="";
+  const fd=new FormData();fd.append("photo",f);$("#ps_ref").textContent="Détection des visages…";
+  try{const r=await fetch("/api/psearch/detect",{method:"POST",headers:{"X-Token":TOKEN},body:fd});const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||r.statusText);
+    $("#ps_thr").value=j.threshold;$("#ps_thr_v").textContent=(+j.threshold).toFixed(2).replace(".",",");
+    $("#ps_faces").innerHTML=(j.faces.length>1?'<span class="muted">Plusieurs visages : cliquez sur la personne à chercher</span>':"")+j.faces.map(x=>`<div class="face" data-ref="${j.ref}" data-idx="${x.idx}" title="${x.px} px"><img src="${x.thumb}" style="width:84px;height:84px"></div>`).join("");
+    psSet({ref:j.ref,idx:0},"Visage de référence : le plus grand de la photo");
+    const first=$("#ps_faces .face");if(first)first.classList.add("sel");
+  }catch(er){$("#ps_ref").textContent="";toast(er.message,1)}};
+$("#ps_faces").addEventListener("click",e=>{const f=e.target.closest(".face");if(!f)return;
+  document.querySelectorAll("#ps_faces .face").forEach(x=>x.classList.remove("sel"));f.classList.add("sel");psSet({ref:f.dataset.ref,idx:+f.dataset.idx},"")});
+$("#ps_go").onclick=()=>{if(!psRef)return toast("Choisissez une personne ou envoyez une photo de référence.",1);psRun(1)};
+let psT=null;
+$("#ps_thr").oninput=()=>{$("#ps_thr_v").textContent=(+$("#ps_thr").value).toFixed(2).replace(".",",");clearTimeout(psT);if(psRef)psT=setTimeout(()=>psRun(1),350)};
+$("#ps_small").onchange=()=>{if(psRef)psRun(1)};
+const psBody=extra=>Object.assign({},psRef,{thr:+$("#ps_thr").value,include_small:$("#ps_small").checked},extra||{});
+async function psRun(p){
+  pspage=p||1;
+  try{psdata=await api("/api/psearch/run",psBody({page:pspage,per:60}));psdata.files.forEach(f=>byId[f.id]=f);
+    $("#ps_bar").style.display="flex";
+    $("#ps_info").textContent=`${psdata.total} photo(s) trouvée(s) — ${psdata.matched_faces} visage(s) au-dessus de ${(+psdata.threshold).toFixed(2)} · moteur ${psdata.engine}`;
+    $("#ps_res").innerHTML=psdata.files.length?psdata.files.map(f=>cardHtml(f,null,psel)).join(""):'<div class="empty" style="grid-column:1/-1">Aucune photo ne dépasse ce seuil. Baissez la « ressemblance minimale » ou cochez « petits visages ». (Il faut avoir analysé le dossier avec le module Visages.)</div>';
+    $("#ps_pager").innerHTML=pager(psdata.total,pspage,60,"psp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}
+  catch(e){toast(e.message,1)}}
+$("#ps_res").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const card=el.closest(".card"),f=byId[card.dataset.id];
+  if(el.dataset.act==="sel")toggleSel(psel,f.id,card,el);else if(el.dataset.act==="view")view(f);
+  else if(el.dataset.act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}else if(el.dataset.act==="ren")doRename(f)});
+$("#ps_all").onclick=async()=>{try{const r=await api("/api/psearch/run",psBody({ids_only:true}));r.ids.forEach(i=>psel.add(i));
+  document.querySelectorAll("#ps_res .card").forEach(c=>{if(psel.has(+c.dataset.id)){c.classList.add("sel");const i=c.querySelector("input");if(i)i.checked=true}});updBar();
+  toast(`${r.ids.length} photo(s) sélectionnée(s) (toutes les pages)`)}catch(e){toast(e.message,1)}};
+$("#ps_none").onclick=()=>{psel.clear();document.querySelectorAll("#ps_res .card.sel").forEach(c=>{c.classList.remove("sel");const i=c.querySelector("input");if(i)i.checked=false});updBar()};
+$("#ps_rm").onclick=()=>{if(confirm(`Supprimer DÉFINITIVEMENT ${psel.size} fichier(s) ?\nAucune corbeille : action irréversible.`))doDelete([...psel])};
+$("#ps_mv").onclick=()=>pickDir("Déplacer "+psel.size+" fichier(s) vers…",d=>moveTo(d,[...psel]));
+$("#ps_to").onchange=async e=>{let to=e.target.value;e.target.value="";if(!to||!psRef)return;
+  const only=psel.size?[...psel]:null;
+  const body=psBody(to==="__new"?{new_name:prompt("Nom de la nouvelle personne :")||"",file_ids:only}:{to:+to,file_ids:only});
+  if(to==="__new"&&!body.new_name)return;
+  if(!confirm(`Affecter ${only?only.length+" photo(s) sélectionnée(s)":"TOUS les visages trouvés (toutes les pages)"} à cette personne ?`))return;
+  try{const r=await api("/api/psearch/assign",body);toast(`${r.assigned} visage(s) affecté(s)`);psInit();psRun(pspage)}catch(er){toast(er.message,1)}};
 
 // ---------------------------------------------------------------- étalonnage
 let cpair=null;

@@ -13,7 +13,15 @@ DATA_DIR = Path(os.environ.get("CD_DATA_DIR") or (BASE / "data"))
 MODELS_DIR = Path(os.environ.get("CD_MODELS_DIR") or (BASE / "models"))
 DB_NAME = "index.sqlite3"
 
-IMG_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff", ".heic", ".heif", ".jfif"}
+# Formats affichables tels quels par un navigateur ; les autres sont convertis en JPEG pour l'aperçu plein écran.
+WEB_EXT = {".jpg", ".jpeg", ".jfif", ".jpe", ".png", ".gif", ".bmp", ".webp"}
+# Formats Apple / modernes décodés par pillow-heif (HEIC, HEIF, HIF, AVIF) et par Pillow (JPEG 2000, TGA, ICO...).
+HEIF_EXT = {".heic", ".heif", ".hif", ".avif", ".avifs", ".heics"}
+# Formats RAW des appareils photo (décodés avec rawpy : aperçu intégré ou demi-résolution).
+RAW_EXT = {".dng", ".cr2", ".cr3", ".crw", ".nef", ".nrw", ".arw", ".sr2", ".srf", ".orf", ".rw2", ".raf", ".pef",
+           ".srw", ".erf", ".kdc", ".dcr", ".mrw", ".3fr", ".iiq", ".rwl", ".x3f"}
+IMG_EXT = ({".jpg", ".jpeg", ".jpe", ".png", ".gif", ".bmp", ".webp", ".tif", ".tiff", ".jfif", ".jp2", ".j2k",
+            ".tga", ".ico", ".ppm", ".pgm"} | HEIF_EXT | RAW_EXT)
 VID_EXT = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg",
            ".3gp", ".mts", ".m2ts", ".ts"}
 
