@@ -111,7 +111,8 @@ def create_app(state=None):
             "ocr": importlib.util.find_spec("rapidocr_onnxruntime") is not None,
             "onnx": importlib.util.find_spec("onnxruntime") is not None,
             "providers": providers(), "fts": S.db.fts,
-            "gpu": next((p for p in providers() if p != "CPUExecutionProvider"), ""),
+            "gpu": (S.mm.gpu_providers() or [""])[0], "gpu_available": next((p for p in providers() if p != "CPUExecutionProvider"), ""),
+            "use_gpu": S.mm.use_gpu(), "gpu_note": S.mm.gpu_note,
             "auto_models": S.auto_models(),
         }
 
@@ -135,6 +136,15 @@ def create_app(state=None):
         for k in ("person_thr_insightface", "person_thr_opencv", "eye_closed_ratio", "blur_min"):
             if k in d:
                 S.db.set_setting(k, float(d[k]))
+        if "use_gpu" in d:
+            S.db.set_setting("use_gpu", "1" if d["use_gpu"] else "0")
+            if d.get("retry_gpu"):               # oublier les essais en échec (nouveau pilote, autre carte)
+                S.db.x("DELETE FROM settings WHERE k LIKE 'gpu_probe:%'")
+            S.mm.gpu_note = ""
+            S.mm.reset_sessions()
+            S.scanner._engines.clear()
+            S._face_engines.clear()
+            S._clip = None
         if d.get("face_engine") in ("insightface", "opencv"):
             S.db.set_setting("face_engine", d["face_engine"])
         return jsonify(settings=_settings())
@@ -198,7 +208,9 @@ def create_app(state=None):
         return jsonify(status=st["status"], phase=st["phase"], done=st["done"], total=st["total"],
                        error=st["error"], root=st["root"], warnings=st["warnings"],
                        elapsed=round(end - st["started"], 1) if st["started"] else 0,
-                       dupes=S.dupe_state, has_results=bool(S.result.groups))
+                       dupes=S.dupe_state, has_results=bool(S.result.groups),
+                       summary={k: (st.get("stats") or {}).get(k) for k in
+                                ("files", "new", "changed", "unchanged", "removed", "to_analyse")})
 
     @app.get("/api/report")
     def api_report():

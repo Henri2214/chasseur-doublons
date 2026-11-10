@@ -109,3 +109,29 @@ def test_annulation_immediate(state, tmp_path):
     st = sc.scan_sync(str(root))
     assert state.db.one("SELECT COUNT(*) n FROM files WHERE done_visual=1")["n"] == 40
     assert st["files"] == 40
+
+
+def test_tout_reanalyser_et_resume(state, photos):
+    """2e analyse : tout est repris de l'index ; avec force=True, tout est recalculé."""
+    s1 = state.scanner.scan_sync(str(photos), {"faces": False})
+    assert s1["new"] == 4 and s1["to_analyse"] == 4
+    s2 = state.scanner.scan_sync(str(photos), {"faces": False})
+    assert s2["new"] == 0 and s2["unchanged"] == 4 and s2["to_analyse"] == 0
+    s3 = state.scanner.scan_sync(str(photos), {"faces": False, "force": True})
+    assert s3["forced"] == 4 and s3["to_analyse"] == 4
+    assert state.db.one("SELECT COUNT(*) n FROM files WHERE phash IS NOT NULL")["n"] == 4
+
+
+def test_gpu_en_echec_bascule_sur_le_processeur(state, tmp_path, monkeypatch):
+    """Un GPU qui plante pendant l'essai (processus séparé) ne doit jamais faire tomber l'application."""
+    import os
+    import pytest
+    md = os.environ.get("CD_MODELS_DIR", "")
+    from core.models import ModelManager
+    mm = ModelManager(md, state.db) if md else None
+    if not mm or not mm.available("yolox_s"):
+        pytest.skip("modèle yolox_s absent (CD_MODELS_DIR)")
+    monkeypatch.setattr(mm, "gpu_providers", lambda: ["FournisseurInexistant"])
+    s = mm.session("yolox_s", "yolox_s.onnx")
+    assert s.get_providers()[0] == "CPUExecutionProvider" and "GPU écarté" in mm.gpu_note
+    assert state.db.one("SELECT COUNT(*) n FROM settings WHERE k LIKE 'gpu_probe:%'")["n"] == 1

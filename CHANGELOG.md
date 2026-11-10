@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.1 - 2026-11-10
+### Corrigé
+- **Plantage (fermeture brutale) au lancement d'une analyse avec Objets / Visages / CLIP sur GPU.**
+  DirectML n'accepte pas plusieurs exécutions simultanées sur une même session, or l'analyse en lançait une
+  par thread. Les appels GPU sont maintenant mis en file (`LockedSession`), avec les options exigées par
+  DirectML (pas de motif mémoire, exécution séquentielle).
+- **Filet de sécurité GPU** : chaque modèle est d'abord essayé sur le GPU dans un processus séparé ; si le
+  pilote plante, le résultat est mémorisé et l'application calcule sur le processeur au lieu de se fermer.
+  Réglages : case « Utiliser le GPU », bouton « Réessayer le GPU », message expliquant l'état.
+- Les plantages natifs laissent désormais une trace dans `data/plantage.log`.
+
+### Ajouté
+- **« Tout réanalyser »** : case qui force le recalcul complet du dossier (par défaut, seuls les fichiers
+  nouveaux ou modifiés sont analysés, les autres sont repris de l'index).
+- Fin d'analyse explicite : « N fichiers : x nouveaux, y modifiés, z disparus, w inchangés repris de
+  l'index — k analysés cette fois ».
+
 ## 2.3.0 - 2026-11-10
 ### Ajouté
 - **Téléchargement automatique des modèles** au lancement (visages OpenCV, objets YOLOX-S, contenu CLIP ;

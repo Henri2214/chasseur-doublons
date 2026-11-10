@@ -33,6 +33,14 @@ def main(argv=None):
     if a.models:
         kw["models_dir"] = a.models
     state = State(**kw)
+    try:    # en cas de plantage brutal (pilote graphique, bibliothèque native), la trace est gardée ici
+        import faulthandler
+        _crash = open(os.path.join(state.data_dir, "plantage.log"), "a", encoding="utf-8")
+        _crash.write("\n=== démarrage %s ===\n" % __version__)
+        _crash.flush()
+        faulthandler.enable(_crash)
+    except Exception:
+        pass
     if not getattr(a, "sans_modeles", False) and state.auto_models():
         lances = state.mm.auto_download()
         if lances:

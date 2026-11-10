@@ -196,7 +196,21 @@ class Scanner:
                 ch = gone[i:i + 500]
                 c.execute("DELETE FROM files WHERE id IN (%s)" % ",".join("?" * len(ch)), ch)
             c.commit()
-        stats.update(new=len(ins), changed=len(upd_changed), unchanged=len(upd_seen), removed=len(gone))
+        forced = 0
+        if o.get("force"):      # « Tout réanalyser » : on oublie ce que l'index sait des fichiers de ce dossier
+            ids = [r["id"] for r in self.db.q("SELECT id FROM files WHERE path >= ? AND path < ?", (lo, hi))]
+            with self.db.wlock:
+                c = self.db.conn()
+                for i in range(0, len(ids), 500):
+                    ch = ids[i:i + 500]
+                    q = ",".join("?" * len(ch))
+                    for t in ("faces", "objects", "ocr", "clip", "scenes"):
+                        c.execute("DELETE FROM %s WHERE file_id IN (%s)" % (t, q), ch)
+                    c.execute("UPDATE files SET " + RESET_COLS + " WHERE id IN (%s)" % q, ch)
+                c.commit()
+            forced = len(ids)
+        stats.update(new=len(ins), changed=len(upd_changed), unchanged=0 if forced else len(upd_seen),
+                     removed=len(gone), forced=forced)
         stats["stages"]["inventaire"] = {"n": len(seen), "s": round(time.time() - tt, 3)}
 
     @staticmethod

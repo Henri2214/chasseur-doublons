@@ -5,8 +5,11 @@
 - les modèles InsightFace (recherche non commerciale) exigent une confirmation explicite de licence ;
 - sessions onnxruntime partagées, threads intra-op limités, fournisseurs CUDA > DirectML > CPU.
 """
+import json
 import os
 import shutil
+import subprocess
+import sys
 import threading
 import urllib.request
 import zipfile
@@ -77,6 +80,49 @@ def providers():
     return [p for p in ("CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider") if p in avail]
 
 
+GPU_PROVIDERS = ("CUDAExecutionProvider", "DmlExecutionProvider")
+
+# Essai du GPU dans un processus séparé : un pilote graphique défaillant fait planter le processus entier
+# (aucune exception Python), il ne faut donc jamais faire le premier essai dans l'application elle-même.
+_PROBE = r"""
+import sys, json, numpy as np, onnxruntime as ort
+path, provs = sys.argv[1], json.loads(sys.argv[2])
+so = ort.SessionOptions(); so.log_severity_level = 3
+if "DmlExecutionProvider" in provs:
+    so.enable_mem_pattern = False
+    so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+s = ort.InferenceSession(path, sess_options=so, providers=provs)
+if s.get_providers()[0] == "CPUExecutionProvider":
+    sys.exit(3)
+feed = {}
+for i in s.get_inputs():
+    shp = [d if isinstance(d, int) and d > 0 else None for d in i.shape]
+    if len(shp) == 4:
+        shp = [shp[0] or 1, shp[1] or 3, shp[2] or 640, shp[3] or 640]
+    else:
+        shp = [d or (1 if k == 0 else 16) for k, d in enumerate(shp)]
+    feed[i.name] = np.zeros(shp, np.int64 if "int64" in i.type else np.int32 if "int32" in i.type else np.float32)
+for _ in range(2):
+    s.run(None, feed)
+"""
+
+
+class LockedSession:
+    """Session GPU : DirectML n'accepte pas plusieurs run() simultanés sur une même session (plantage
+    du processus). Les appels sont donc mis en file ; le GPU traite de toute façon une image à la fois."""
+
+    def __init__(self, sess):
+        self._s = sess
+        self._l = threading.Lock()
+
+    def run(self, *a, **k):
+        with self._l:
+            return self._s.run(*a, **k)
+
+    def __getattr__(self, name):
+        return getattr(self._s, name)
+
+
 class ModelManager:
     def __init__(self, root=MODELS_DIR, db=None):
         self.root = str(root)
@@ -84,6 +130,38 @@ class ModelManager:
         self.progress = {}          # name -> {done, total, status, error}
         self._sessions = {}
         self._lock = threading.Lock()
+        self.gpu_note = ""          # explication affichée dans Réglages quand le GPU n'est pas utilisé
+
+    # ------------------------------------------------------------ GPU
+    def use_gpu(self):
+        if os.environ.get("CD_FORCE_CPU"):
+            return False
+        return not self.db or str(self.db.get_setting("use_gpu", "1")) not in ("0", "False", "false")
+
+    def gpu_providers(self):
+        return [p for p in providers() if p in GPU_PROVIDERS] if self.use_gpu() else []
+
+    def _gpu_safe(self, path, provs):
+        """Vrai si le modèle tourne sur le GPU dans un processus d'essai (résultat mémorisé)."""
+        key = "gpu_probe:%s:%s:%s:%s" % (os.path.basename(path), os.path.getsize(path),
+                                         getattr(ort, "__version__", "?"), provs[0])
+        if self.db:
+            v = self.db.get_setting(key)
+            if v is not None:
+                if not v:
+                    self.gpu_note = "GPU écarté après un essai en échec (%s) : calcul sur le processeur." % provs[0]
+                return bool(v)
+        try:
+            r = subprocess.run([sys.executable, "-c", _PROBE, path, json.dumps(provs)], capture_output=True,
+                               timeout=180)
+            ok = r.returncode == 0
+        except Exception:
+            ok = False
+        if not ok:
+            self.gpu_note = "GPU écarté après un essai en échec (%s) : calcul sur le processeur." % provs[0]
+        if self.db:
+            self.db.set_setting(key, bool(ok))
+        return ok
 
     # ------------------------------------------------------------ état
     def path(self, rel):
@@ -238,10 +316,31 @@ class ModelManager:
             # pas d'arène mémoire : sinon chaque exécution concurrente conserve ses tampons (RAM x threads)
             so.enable_cpu_mem_arena = False
             so.log_severity_level = 3
-            provs = providers()
-            try:
-                s = ort.InferenceSession(self.path(rel), sess_options=so, providers=provs)
-            except Exception:
+            s = None
+            gpu = self.gpu_providers()
+            if gpu and self._gpu_safe(self.path(rel), gpu + ["CPUExecutionProvider"]):
+                try:
+                    if "DmlExecutionProvider" in gpu:      # exigences de DirectML
+                        so.enable_mem_pattern = False
+                        so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                    g = ort.InferenceSession(self.path(rel), sess_options=so, providers=gpu + ["CPUExecutionProvider"])
+                    if g.get_providers()[0] in GPU_PROVIDERS:
+                        s = LockedSession(g)
+                    else:
+                        s = g
+                except Exception as e:  # noqa
+                    self.gpu_note = "GPU indisponible pour %s (%s) : calcul sur le processeur." % (rel, e)
+                    s = None
+            if s is None:
+                so = ort.SessionOptions()
+                so.intra_op_num_threads = max(1, (os.cpu_count() or 2) // WORKERS)
+                so.inter_op_num_threads = 1
+                so.enable_cpu_mem_arena = False
+                so.log_severity_level = 3
                 s = ort.InferenceSession(self.path(rel), sess_options=so, providers=["CPUExecutionProvider"])
             self._sessions[key] = s
             return s
+
+    def reset_sessions(self):
+        with self._lock:
+            self._sessions.clear()

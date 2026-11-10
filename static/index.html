@@ -137,6 +137,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
       <label class="opt" id="l_ocr">Texte <select id="m_ocr"><option value="aucun">aucun</option><option value="auto">captures/documents</option><option value="toutes">toutes les images</option></select></label>
       <label class="opt" id="l_clip"><input type="checkbox" id="m_clip"><b>IA CLIP</b></label>
       <label class="opt"><input type="checkbox" id="m_quality" checked><b>Qualité</b></label>
+      <label class="opt" title="Par défaut, seuls les fichiers nouveaux ou modifiés sont analysés (les autres sont repris de l'index, c'est pourquoi une 2e analyse est quasi instantanée). Cochez pour tout recalculer : visages, objets, empreintes. Les regroupements de personnes de ce dossier seront refaits."><input type="checkbox" id="m_force"><b>Tout réanalyser</b></label>
       <label class="opt">vidéos <select id="vprec"><option value="6">6 images</option><option value="12" selected>12 images</option><option value="24">24 images</option></select></label>
       <label class="opt">visages <select id="fdet"><option value="rapide">rapide</option><option value="equilibre" selected>équilibré</option><option value="precis">précis</option></select></label>
     </div>
@@ -379,7 +380,7 @@ async function openModels(key){
 // ---------------------------------------------------------------- analyse
 function scanOpts(){return{images:$("#o_images").checked,videos:$("#o_videos").checked,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,
   exact:$("#m_exact").checked,visual:$("#m_visual").checked,faces:$("#m_faces").checked,objects:$("#m_objects").checked,ocr:$("#m_ocr").value,
-  clip:$("#m_clip").checked,quality:$("#m_quality").checked,vframes:+$("#vprec").value,face_engine:SET.face_engine||"opencv",face_det:$("#fdet").value}}
+  clip:$("#m_clip").checked,quality:$("#m_quality").checked,force:$("#m_force").checked,vframes:+$("#vprec").value,face_engine:SET.face_engine||"opencv",face_det:$("#fdet").value}}
 function dupOpts(){return{rigor:$("#rig").value,exif:$("#o_exif").checked,clip_dupes:$("#o_clipd").checked,clip_thr:+$("#clip_thr").value,
   images:$("#o_images").checked,videos:$("#o_videos").checked,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,exact:$("#m_exact").checked,visual:$("#m_visual").checked}}
 $("#go").onclick=async()=>{
@@ -414,7 +415,8 @@ async function poll(){
   setRunning(false);
   if(s.root){if(!$("#path").value)$("#path").value=s.root;if(s.root!==scanRoot){scanRoot=s.root;initTree()}}
   s.warnings.forEach(w=>toast(w,1));
-  if(s.status==="done"){phaseBase=`Analyse terminée en ${s.elapsed}s.`;$("#phase").textContent=phaseBase;if(lastStatus==="running"||!s.has_results)await recompute();else loadGroups()}
+  if(s.status==="done"){const m=s.summary||{};$("#m_force").checked=false;
+    phaseBase=`Analyse terminée en ${s.elapsed}s.`+(m.files!=null?` ${m.files} fichier(s) dans le dossier : ${m.new||0} nouveau(x), ${m.changed||0} modifié(s), ${m.removed||0} disparu(s), ${m.unchanged||0} inchangé(s) repris de l'index — ${m.to_analyse||0} analysé(s) cette fois.`:"");$("#phase").textContent=phaseBase;if(lastStatus==="running"||!s.has_results)await recompute();else loadGroups()}
   else if(s.status==="error"){$("#phase").textContent="Erreur : "+s.error;toast(s.error,1)}
   else if(s.status==="cancelled"){$("#phase").textContent="Analyse annulée.";if(started){toast("Analyse annulée.");$("#res").innerHTML='<div class="empty">Analyse annulée.</div>'}}
   started=false;lastStatus=s.status;
@@ -827,7 +829,10 @@ async function loadSettings(){
       <span class="muted">visages OpenCV (licence libre) + objets YOLOX-S + contenu CLIP. InsightFace reste à part : licence recherche non commerciale.</span></div>
     <div class="row" style="margin-top:8px"><label class="opt"><input type="checkbox" id="auto_m" ${CAPS.auto_models?"checked":""}><b>Télécharger automatiquement les modèles conseillés</b></label>
       <span class="muted">au lancement de l'application, en arrière-plan (hors InsightFace : licence à accepter).</span></div>
-    <p class="muted">${CAPS.gpu?"🚀 GPU actif : "+esc(CAPS.gpu):"⚠ Calcul sur le processeur uniquement. Pour activer le GPU : fermez l'application, puis <code>.venv\\Scripts\\pip install --force-reinstall onnxruntime-directml</code> (Windows, toute carte DirectX 12) ou <code>onnxruntime-gpu</code> (NVIDIA + CUDA 12). <code>lancer.bat</code> le fait tout seul au premier lancement ; supprimez <code>.venv\\gpu.txt</code> pour refaire la détection."}</p>
+    <div class="row"><label class="opt"><input type="checkbox" id="use_gpu" ${CAPS.use_gpu?"checked":""}><b>Utiliser le GPU</b></label>
+      <button id="gpu_retry">Réessayer le GPU</button><span class="muted">${esc(CAPS.gpu_note||"")}</span>
+      <span class="muted">Chaque modèle est d'abord essayé sur le GPU dans un processus séparé : si le pilote plante, l'application bascule seule sur le processeur au lieu de se fermer.</span></div>
+    <p class="muted">${CAPS.gpu?"🚀 GPU actif : "+esc(CAPS.gpu):CAPS.gpu_available?"GPU disponible ("+esc(CAPS.gpu_available)+") mais désactivé ci-dessus.":"⚠ Calcul sur le processeur uniquement. Pour activer le GPU : fermez l'application, puis <code>.venv\\Scripts\\pip install --force-reinstall onnxruntime-directml</code> (Windows, toute carte DirectX 12) ou <code>onnxruntime-gpu</code> (NVIDIA + CUDA 12). <code>lancer.bat</code> le fait tout seul au premier lancement ; supprimez <code>.venv\\gpu.txt</code> pour refaire la détection."}</p>
     <p class="muted">Accélération : ${CAPS.providers.join(", ")||"onnxruntime absent"} · OCR : ${CAPS.ocr?"disponible":"absent (pip install rapidocr-onnxruntime)"} · HEIC : ${CAPS.heif?"oui":"non"} · recherche plein texte : ${CAPS.fts?"FTS5":"LIKE"}</p></div>
   <div class="panel"><h3>Visages</h3>
     <div class="row"><label class="opt">Moteur de visages <select id="s_eng"><option value="opencv">OpenCV YuNet + SFace (licence libre, moins précis)</option><option value="insightface">InsightFace SCRFD + ArcFace (précis, non commercial)</option></select></label></div>
@@ -837,6 +842,8 @@ async function loadSettings(){
       <label class="opt">Photo floue si netteté < <input type="number" step="1" id="s_blur" value="${SET.blur_min}" style="width:80px"></label>
       <button id="s_save" class="pri">Enregistrer</button></div>
     <p class="muted">Les données de visages restent sur ce PC (base locale) et ne sont jamais envoyées sur le réseau. Bouton d'effacement dans l'onglet Personnes.</p></div>`;
+  $("#use_gpu").onchange=async e=>{await api("/api/settings",{use_gpu:e.target.checked});toast(e.target.checked?"GPU activé":"GPU désactivé : calcul sur le processeur");loadSettings()};
+  $("#gpu_retry").onclick=async()=>{await api("/api/settings",{use_gpu:true,retry_gpu:true});toast("Le GPU sera réessayé à la prochaine analyse");loadSettings()};
   $("#auto_m").onchange=async e=>{await api("/api/models/auto",{enabled:e.target.checked});
     toast(e.target.checked?"Téléchargement automatique activé":"Téléchargement automatique désactivé");autoLance=false;loadSettings()};
   $("#dl_reco").onclick=async()=>{
