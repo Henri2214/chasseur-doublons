@@ -138,7 +138,10 @@ class InsightFaceEngine:
 
     def embed(self, aligned_list):
         blob = cv2.dnn.blobFromImages(aligned_list, 1.0 / 127.5, (112, 112), (127.5, 127.5, 127.5), swapRB=True)
-        e = self.rec.run(None, {self.rec_in: blob})[0]
+        if getattr(self.rec, "gpu", False):     # GPU : un visage à la fois (taille d'entrée constante)
+            e = np.concatenate([self.rec.run(None, {self.rec_in: blob[i:i + 1]})[0] for i in range(len(blob))])
+        else:
+            e = self.rec.run(None, {self.rec_in: blob})[0]
         return e / (np.linalg.norm(e, axis=1, keepdims=True) + 1e-9)
 
     def analyse(self, bgr):

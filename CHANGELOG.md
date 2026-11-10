@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3.2 - 2026-11-10
+### Corrigé
+- **Plantage pendant l'analyse avec IA CLIP sur GPU** (« Serveur injoignable ») : `data/plantage.log`
+  montrait une violation d'accès dans le modèle de texte CLIP exécuté par DirectML. Les modèles CLIP
+  « quantized » restent désormais toujours sur le processeur, pour lequel ils sont conçus.
+- Le GPU n'est plus utilisé que pour une liste fermée de modèles à entrée fixe (YOLOX, détection et
+  reconnaissance de visages InsightFace), une seule exécution GPU à la fois toutes sessions confondues,
+  un visage à la fois pour la reconnaissance.
+- **Coupe-circuit** : si une analyse fait tomber le programme alors que le GPU est utilisé, il est
+  désactivé automatiquement au redémarrage suivant (message dans Réglages, bouton « Réessayer le GPU »).
+
 ## 2.3.1 - 2026-11-10
 ### Corrigé
 - **Plantage (fermeture brutale) au lancement d'une analyse avec Objets / Visages / CLIP sur GPU.**

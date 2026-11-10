@@ -81,6 +81,11 @@ def providers():
 
 
 GPU_PROVIDERS = ("CUDAExecutionProvider", "DmlExecutionProvider")
+# Seuls ces modèles vont sur le GPU : taille d'entrée fixe, précision flottante.
+# Les modèles CLIP « quantized » (entiers 8 bits) sont conçus pour le processeur : sur DirectML ils
+# n'apportent rien et provoquent une violation d'accès (plantage constaté en 2.3.1).
+GPU_MODELS = {"yolox_s.onnx", "yolox_nano.onnx", "det_10g.onnx", "w600k_r50.onnx", "2d106det.onnx"}
+_GPU_LOCK = threading.Lock()     # une seule exécution GPU à la fois, toutes sessions confondues
 
 # Essai du GPU dans un processus séparé : un pilote graphique défaillant fait planter le processus entier
 # (aucune exception Python), il ne faut donc jamais faire le premier essai dans l'application elle-même.
@@ -111,9 +116,11 @@ class LockedSession:
     """Session GPU : DirectML n'accepte pas plusieurs run() simultanés sur une même session (plantage
     du processus). Les appels sont donc mis en file ; le GPU traite de toute façon une image à la fois."""
 
+    gpu = True
+
     def __init__(self, sess):
         self._s = sess
-        self._l = threading.Lock()
+        self._l = _GPU_LOCK
 
     def run(self, *a, **k):
         with self._l:
@@ -317,7 +324,7 @@ class ModelManager:
             so.enable_cpu_mem_arena = False
             so.log_severity_level = 3
             s = None
-            gpu = self.gpu_providers()
+            gpu = self.gpu_providers() if os.path.basename(rel) in GPU_MODELS else []
             if gpu and self._gpu_safe(self.path(rel), gpu + ["CPUExecutionProvider"]):
                 try:
                     if "DmlExecutionProvider" in gpu:      # exigences de DirectML

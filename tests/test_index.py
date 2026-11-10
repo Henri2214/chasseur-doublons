@@ -135,3 +135,19 @@ def test_gpu_en_echec_bascule_sur_le_processeur(state, tmp_path, monkeypatch):
     s = mm.session("yolox_s", "yolox_s.onnx")
     assert s.get_providers()[0] == "CPUExecutionProvider" and "GPU écarté" in mm.gpu_note
     assert state.db.one("SELECT COUNT(*) n FROM settings WHERE k LIKE 'gpu_probe:%'")["n"] == 1
+
+
+def test_plantage_pendant_analyse_desactive_le_gpu(tmp_path):
+    """Témoin laissé par une analyse interrompue brutalement : au redémarrage, le GPU est coupé."""
+    from core.web import State
+    s = State(data_dir=str(tmp_path / "d"), models_dir=str(tmp_path / "m"))
+    assert s.mm.use_gpu()
+    s.db.set_setting("analyse_en_cours", {"gpu": True})
+    s2 = State(data_dir=str(tmp_path / "d"), models_dir=str(tmp_path / "m"))
+    assert not s2.mm.use_gpu() and "GPU désactivé" in s2.mm.gpu_note
+    assert s2.db.get_setting("analyse_en_cours") is None
+
+
+def test_clip_jamais_sur_gpu():
+    from core.models import GPU_MODELS
+    assert not any("clip" in m or "quantized" in m for m in GPU_MODELS)

@@ -29,6 +29,15 @@ class State:
         os.makedirs(self.data_dir, exist_ok=True)
         self.db = Database(os.path.join(self.data_dir, "index.sqlite3"))
         self.mm = ModelManager(models_dir, self.db) if models_dir else ModelManager(db=self.db)
+        # l'analyse précédente a-t-elle fait tomber le programme alors que le GPU était utilisé ?
+        temoin = self.db.get_setting("analyse_en_cours")
+        if temoin:
+            self.db.x("DELETE FROM settings WHERE k='analyse_en_cours'")
+            if temoin.get("gpu"):
+                self.db.set_setting("use_gpu", "0")
+                self.db.set_setting("gpu_note", "GPU désactivé automatiquement : la dernière analyse s'est arrêtée "
+                                                "brutalement alors qu'il était utilisé. Calcul sur le processeur.")
+        self.mm.gpu_note = self.db.get_setting("gpu_note", "") if not self.mm.use_gpu() else ""
         self.scanner = Scanner(self.db, self.mm)
         self.scope = Scope()
         self.result = dupes.DupeResult()
@@ -141,6 +150,7 @@ def create_app(state=None):
             if d.get("retry_gpu"):               # oublier les essais en échec (nouveau pilote, autre carte)
                 S.db.x("DELETE FROM settings WHERE k LIKE 'gpu_probe:%'")
             S.mm.gpu_note = ""
+            S.db.x("DELETE FROM settings WHERE k='gpu_note'")
             S.mm.reset_sessions()
             S.scanner._engines.clear()
             S._face_engines.clear()

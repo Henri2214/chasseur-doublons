@@ -112,6 +112,9 @@ class Scanner:
             self._inventory(root, o, stats)
             if o.get("exact"):
                 self._exact(root, o, stats)
+            # témoin : s'il est encore là au prochain démarrage, c'est que l'analyse a fait tomber le programme
+            if o.get("faces") or o.get("objects") or o.get("clip"):
+                self.db.set_setting("analyse_en_cours", {"gpu": bool(self.mm.gpu_providers())})
             self._analyse(root, o, stats)
             if o.get("faces") and stats.get("faces_new"):
                 self._phase("Regroupement des visages en personnes")
@@ -126,6 +129,10 @@ class Scanner:
             self.state["status"] = "error"
             self.state["error"] = "%s: %s" % (type(e).__name__, e)
         finally:
+            try:
+                self.db.x("DELETE FROM settings WHERE k='analyse_en_cours'")
+            except Exception:
+                pass
             stats["total_s"] = round(time.time() - t0, 3)
             self.state["stats"] = stats
             self.state["ended"] = time.time()
