@@ -123,3 +123,77 @@ def similar(db, file_id, thr=0.55, sources=None, limit=5000):
                                               key=lambda s: -d[s])))
     out.sort(key=lambda x: -x[1])
     return out[:limit]
+
+
+# ------------------------------------------------------------------ recherche à partir d'une zone d'une photo
+ZONE_CLIP_LOW, ZONE_CLIP_HIGH = 0.50, 0.90   # cosinus CLIP entre un recadrage et des photos entières
+
+
+def zone_signature(crop_rgb, yolo=None, clip_model=None, face_engine=None):
+    """Ce que contient la zone tracée : objets reconnus, empreinte CLIP, visage éventuel."""
+    sig = {"labels": [], "clip": None, "face": None}
+    bgr = np.ascontiguousarray(np.asarray(crop_rgb)[:, :, ::-1])
+    if yolo is not None:
+        try:
+            best = {}
+            for lab, sc, box in yolo.detect(bgr, thr=0.30):
+                area = max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
+                w = sc * (0.5 + 0.5 * min(1.0, area / 0.5))        # un objet qui remplit la zone compte plus
+                best[lab] = max(best.get(lab, 0), w)
+            sig["labels"] = sorted(best.items(), key=lambda t: -t[1])[:4]
+        except Exception:
+            pass
+    if clip_model is not None:
+        try:
+            sig["clip"] = clip_model.image([crop_rgb])[0].astype(np.float32)
+        except Exception:
+            pass
+    if face_engine is not None:
+        try:
+            faces = [f for f in face_engine.analyse(bgr) if f.get("emb") is not None]
+            if faces:
+                f = max(faces, key=lambda f: (f["box"][2] - f["box"][0]) * (f["box"][3] - f["box"][1]))
+                e = np.asarray(f["emb"], np.float32)
+                sig["face"] = e / (np.linalg.norm(e) + 1e-9)
+        except Exception:
+            pass
+    return sig
+
+
+def zone_search(db, sig, face_engine_name=None, thr=0.45, sources=None, exclude=None, limit=5000):
+    """Photos contenant quelque chose de semblable à la zone. Même format de sortie que similar()."""
+    on = set(sources or ("personne", "objet", "clip"))
+    comp = {}
+
+    def put(i, src, s):
+        if s <= 0:
+            return
+        d = comp.setdefault(i, {})
+        if s > d.get(src, 0):
+            d[src] = s
+
+    if "objet" in on and sig.get("labels"):
+        top = sig["labels"][0][1]
+        for lab, w in sig["labels"]:
+            base = 0.80 if w >= top - 1e-9 else 0.60
+            for r in db.q("SELECT file_id, MAX(score) s FROM objects WHERE label=? GROUP BY file_id", (lab,)):
+                put(r["file_id"], "objet", _c01(base * (0.75 + 0.25 * float(r["s"] or 0))))
+    if "clip" in on and sig.get("clip") is not None:
+        ids_c, E = CLIP_INDEX.get(db)
+        if E is not None and len(ids_c):
+            e = sig["clip"] / (np.linalg.norm(sig["clip"]) + 1e-9)
+            sim = E.astype(np.float32) @ e
+            for k in np.nonzero(sim >= ZONE_CLIP_LOW)[0]:
+                put(int(ids_c[k]), "clip", _c01((float(sim[k]) - ZONE_CLIP_LOW) / (ZONE_CLIP_HIGH - ZONE_CLIP_LOW)))
+    if "personne" in on and sig.get("face") is not None and face_engine_name:
+        from .persons import best_per_file, match_faces, threshold
+        t = threshold(db, face_engine_name)
+        for file_id, _, _, s in best_per_file(match_faces(db, face_engine_name, sig["face"], t)):
+            put(file_id, "personne", _c01(0.70 + 0.30 * (s - t) / max(1e-6, 1 - t)))
+    out = []
+    for i, d in comp.items():
+        best = max(d.values())
+        if best >= thr:
+            out.append((i, round(best, 3), sorted([s for s, v in d.items() if v >= best - 0.08], key=lambda s: -d[s])))
+    out.sort(key=lambda x: -x[1])
+    return out[:limit]

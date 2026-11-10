@@ -66,6 +66,9 @@ main{padding:14px 20px 80px;flex:1;min-width:0}
 .pager{display:flex;gap:8px;justify-content:center;align-items:center;margin:10px 0}
 #lb,#modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:50;flex-direction:column}
 #lb img,#lb video{max-width:94vw;max-height:78vh}
+#lbc{position:relative;display:inline-block;line-height:0}
+#lbc.zone img{cursor:crosshair}
+#zrect{position:absolute;border:2px solid #4c8dff;background:rgba(76,141,255,.22);pointer-events:none;display:none}
 #lb .cap{color:#fff;margin-top:10px;text-align:center;max-width:90vw;word-break:break-all}
 #lb .det{color:var(--mut);font-size:12px;max-width:90vw;margin-top:4px;white-space:pre-wrap;max-height:12vh;overflow:auto}
 .dlg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;gap:10px}
@@ -547,7 +550,9 @@ async function doRename(f){
 function view(f){
   const src="/api/file?id="+f.id;
   $("#lbc").innerHTML=f.kind==="video"?`<video src="${src}" controls autoplay></video>`:`<img src="${f.kind==="image"?src:"/api/thumb?id="+f.id+"&s=600"}">`;
-  $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+' <button id="lbsim">Photos similaires</button>';
+  $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+' <button id="lbsim">Photos similaires</button>'+(f.kind==="image"?' <button id="lbzone" title="Tracez un rectangle autour d\'un objet, d\'un visage ou d\'un détail : toutes les photos qui contiennent la même chose ressortent">🔲 Chercher une zone</button>':"");
+  zoneOff();
+  if($("#lbzone"))$("#lbzone").onclick=ev=>{ev.stopPropagation();zoneOn(f)};
   $("#lbsim").onclick=ev=>{ev.stopPropagation();closeLb();openSimilar(f)};$("#lbdet").textContent="";$("#lb").style.display="flex";
   api("/api/info?id="+f.id).then(r=>{
     const chip=(lab,k,v)=>`<span class="chip" data-k="${k}" data-v="${esc(v)}" title="Voir toutes les photos avec « ${esc(lab)} »">${esc(lab)}</span>`;
@@ -566,7 +571,24 @@ function view(f){
     if(!objs.length&&!r.faces.length&&!r.scenes.length)h+='<div class="muted">Aucun visage ni objet reconnu ici : lancez une analyse avec les modules Visages et Objets cochés.</div>';
     $("#lbdet").innerHTML=h}).catch(()=>{});
 }
-function closeLb(){$("#lb").style.display="none";$("#lbc").innerHTML=""}
+function closeLb(){zoneOff();$("#lb").style.display="none";$("#lbc").innerHTML=""}
+// ---- tracé d'une zone sur la photo agrandie
+let zoneF=null,zoneDrag=null;
+function zoneOff(){zoneF=null;zoneDrag=null;$("#lbc").classList.remove("zone")}
+function zoneOn(f){zoneF=f;$("#lbc").classList.add("zone");
+  if(!$("#zrect")){const d=document.createElement("div");d.id="zrect";$("#lbc").append(d)}
+  $("#zrect").style.display="none";
+  $("#lbdet").innerHTML='<div><b>Tracez un rectangle sur la photo</b> (cliquez, glissez, relâchez) autour de ce que vous cherchez : un objet, un visage, un détail. Échap pour annuler.</div>'}
+const zpos=(e,im)=>{const r=im.getBoundingClientRect();return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))]};
+$("#lbc").addEventListener("click",e=>{if(zoneF)e.stopPropagation()});
+$("#lbc").addEventListener("mousedown",e=>{if(!zoneF)return;const im=$("#lbc img");if(!im)return;e.preventDefault();zoneDrag=zpos(e,im)});
+window.addEventListener("mousemove",e=>{if(!zoneDrag)return;const im=$("#lbc img"),[x,y]=zpos(e,im),z=$("#zrect"),r=im.getBoundingClientRect();
+  const x1=Math.min(x,zoneDrag[0]),y1=Math.min(y,zoneDrag[1]),x2=Math.max(x,zoneDrag[0]),y2=Math.max(y,zoneDrag[1]);
+  Object.assign(z.style,{display:"block",left:(im.offsetLeft+x1*r.width)+"px",top:(im.offsetTop+y1*r.height)+"px",width:((x2-x1)*r.width)+"px",height:((y2-y1)*r.height)+"px"})});
+window.addEventListener("mouseup",e=>{if(!zoneDrag)return;const im=$("#lbc img"),[x,y]=zpos(e,im),s=zoneDrag;zoneDrag=null;
+  const box=[Math.min(x,s[0]),Math.min(y,s[1]),Math.max(x,s[0]),Math.max(y,s[1])];
+  if(box[2]-box[0]<0.02||box[3]-box[1]<0.02)return toast("Zone trop petite : tracez un rectangle plus grand.",1);
+  const f=zoneF;closeLb();openZone(f,box)});
 $("#lbdet").addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c)return;
   e.stopPropagation();closeLb();showTab("exp");
   $("#xq").value="";["xkind","xperson","xobject","xscene","xblur","xfolder","xfrom","xto"].forEach(i=>$("#"+i).value="");
@@ -716,17 +738,33 @@ $("#xres").addEventListener("click",e=>{const el=e.target.closest("[data-act]");
 let simRef=null,simpage=1,simdata=null;
 const simSources=()=>[...document.querySelectorAll(".sim_s:checked")].map(x=>x.value).join(",");
 function openSimilar(f){
-  simRef=f.id;ssel.clear();simpage=1;
+  simZone=null;simRef=f.id;ssel.clear();simpage=1;
   $("#sim_head").innerHTML=`<img src="/api/thumb?id=${f.id}&s=160" style="height:90px;border-radius:8px">
     <div><b>${esc(f.name||"")}</b><div class="muted">${esc(f.folder||dirOf(f.path||""))}</div></div><span style="flex:1"></span>
     <button id="sim_view">Voir en grand</button>`;
   $("#sim_view").onclick=()=>view(byId[f.id]||f);
   showTab("sim");simRun(1);
 }
+let simZone=null;
+function openZone(f,box){
+  simRef=f.id;simZone=box;ssel.clear();simpage=1;
+  $("#sim_thr").value=0.45;$("#sim_thr_v").textContent="0,45";
+  const w=Math.round(100*(box[2]-box[0])),h=Math.round(100*(box[3]-box[1]));
+  $("#sim_head").innerHTML=`<div style="position:relative;display:inline-block;line-height:0"><img src="/api/thumb?id=${f.id}&s=400" style="height:130px;border-radius:8px">
+      <div style="position:absolute;border:2px solid #4c8dff;background:rgba(76,141,255,.25);left:${box[0]*100}%;top:${box[1]*100}%;width:${(box[2]-box[0])*100}%;height:${(box[3]-box[1])*100}%"></div></div>
+    <div><b>Zone tracée dans ${esc(f.name||"")}</b><div class="muted">${w} % × ${h} % de l'image</div><div class="muted" id="sim_found">Analyse de la zone…</div></div><span style="flex:1"></span>
+    <button id="sim_view">Retracer une zone</button>`;
+  $("#sim_view").onclick=()=>{view(byId[f.id]||f);setTimeout(()=>zoneOn(byId[f.id]||f),50)};
+  showTab("sim");simRun(1);
+}
 const simQuery=extra=>new URLSearchParams({id:simRef,thr:$("#sim_thr").value,sources:simSources(),...extra});
+const simFetch=extra=>simZone?api("/api/zone_search",{id:simRef,box:simZone,thr:+$("#sim_thr").value,sources:simSources(),...extra}):api((extra.ids_only?"/api/similar_ids?":"/api/similar?")+simQuery(extra));
 async function simRun(p){
   if(!simRef)return;simpage=p||1;
-  try{simdata=await api("/api/similar?"+simQuery({page:simpage,per:PHOTOS}));simdata.files.forEach(f=>byId[f.id]=f);
+  try{simdata=await simFetch({page:simpage,per:PHOTOS});simdata.files.forEach(f=>byId[f.id]=f);
+    if(simZone&&simdata.found&&$("#sim_found")){const fo=simdata.found,t=[];
+      if(fo.labels.length)t.push("objets reconnus : "+fo.labels.join(", "));if(fo.face)t.push("un visage");if(fo.clip)t.push("empreinte de contenu (CLIP)");
+      $("#sim_found").textContent=t.length?"Dans la zone — "+t.join(" · "):"Rien d'exploitable dans cette zone. Moyens disponibles : "+(fo.means.join(", ")||"aucun (téléchargez les modèles dans Réglages)")+"."}
     $("#sim_bar").style.display="flex";
     $("#sim_info").textContent=`${simdata.total} photo(s) similaire(s)`+(simdata.sources.length?" · sources : "+simdata.sources.join(", "):"");
     $("#sim_res").innerHTML=simdata.files.length?simdata.files.map(f=>cardHtml(f,null,ssel)).join(""):'<div class="empty" style="grid-column:1/-1">Aucune photo semblable au-dessus de ce seuil. Baissez la « ressemblance minimale ». Les sources « mêmes personnes », « mêmes objets » et « même contenu » n\'agissent que si le dossier a été analysé avec ces modules (modèles à télécharger dans Réglages).</div>';
@@ -738,7 +776,7 @@ document.querySelectorAll(".sim_s").forEach(c=>c.onchange=()=>{if(simRef)simRun(
 $("#sim_res").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const card=el.closest(".card"),f=byId[card.dataset.id];
   if(el.dataset.act==="sel")toggleSel(ssel,f.id,card,el);else if(el.dataset.act==="view")view(f);else if(el.dataset.act==="sim")openSimilar(f);
   else if(el.dataset.act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}else if(el.dataset.act==="ren")doRename(f)});
-$("#sim_all").onclick=async()=>{try{const r=await api("/api/similar_ids?"+simQuery({}));r.ids.forEach(i=>ssel.add(i));
+$("#sim_all").onclick=async()=>{try{const r=await simFetch({ids_only:true});r.ids.forEach(i=>ssel.add(i));
   document.querySelectorAll("#sim_res .card").forEach(c=>{if(ssel.has(+c.dataset.id)){c.classList.add("sel");const i=c.querySelector("input");if(i)i.checked=true}});updBar();
   toast(`${r.ids.length} photo(s) sélectionnée(s) (toutes les pages)`)}catch(e){toast(e.message,1)}};
 $("#sim_none").onclick=()=>{ssel.clear();document.querySelectorAll("#sim_res .card.sel").forEach(c=>{c.classList.remove("sel");const i=c.querySelector("input");if(i)i.checked=false});updBar()};

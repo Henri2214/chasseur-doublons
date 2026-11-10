@@ -118,7 +118,10 @@ modifiés (taille + date de modification) et purge les fichiers disparus.
   - quatre sources combinables : empreinte visuelle (fonctionne sans aucun modèle), mêmes personnes
     (visages regroupés), mêmes objets (YOLOX), même contenu (CLIP) ; chaque résultat indique sa source et
     son pourcentage ;
-  - curseur de ressemblance minimale, « Tout sélectionner », déplacement et suppression groupés.
+  - curseur de ressemblance minimale, « Tout sélectionner », déplacement et suppression groupés ;
+  - **recherche par zone** : dans l'aperçu plein écran, « Chercher une zone », puis tracer un rectangle
+    autour d'un objet, d'un visage ou d'un détail ; les photos contenant la même chose ressortent (objets
+    YOLOX de la zone, visage de la zone, contenu CLIP de la zone). La partie CLIP n'a pas pu être testée ici.
 - **Recherche de personne** (identification faciale) :
   - choisir une personne déjà regroupée, ou **envoyer une photo de référence** (JPEG, PNG, HEIC, AVIF, RAW…) ;
     si la photo contient plusieurs visages, on clique sur celui à chercher ; depuis l'onglet Personnes,

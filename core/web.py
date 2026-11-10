@@ -50,6 +50,7 @@ class State:
         self._clip_lock = threading.Lock()
         self._face_engines = {}
         self._face_lock = threading.Lock()
+        self.zone_cache = {}          # (photo, zone) -> signature de la zone tracée
         self.psearch_refs = {}        # jeton -> {"engine": str, "embs": [vecteurs]} (photos de référence envoyées)
 
     def face_engine(self, name):
@@ -616,6 +617,70 @@ def create_app(state=None):
         ref = S.db.one("SELECT id, path, name FROM files WHERE id=?", (fid,))
         h.update(ref={"id": fid, "name": ref["name"] if ref else "", "path": ref["path"] if ref else ""},
                  sources=sorted({x for r in res for x in r[2]}))
+        return jsonify(h)
+
+    def zone_sig(fid, box):
+        """Signature de la zone (objets, CLIP, visage), mise en cache : la pagination ne recalcule rien."""
+        r = file_row(fid)
+        if r["kind"] != "image":
+            raise ValueError("La recherche par zone ne s'applique qu'aux images.")
+        x1, y1, x2, y2 = [min(1.0, max(0.0, float(v))) for v in box]
+        if x2 - x1 < 0.02 or y2 - y1 < 0.02:
+            raise ValueError("Zone trop petite : tracez un rectangle plus grand.")
+        key = (fid, r["mtime"], round(x1, 3), round(y1, 3), round(x2, 3), round(y2, 3), S.db.get_setting("face_engine", "opencv"))
+        if key in S.zone_cache:
+            return S.zone_cache[key]
+        from .imaging import decode
+        dec = decode(r["path"], 2000)
+        W, H = dec.rgb.size
+        crop = dec.rgb.crop((int(x1 * W), int(y1 * H), max(int(x1 * W) + 8, int(x2 * W)), max(int(y1 * H) + 8, int(y2 * H))))
+        yolo = None
+        for v in ("yolox_s", "yolox_nano"):
+            if S.mm.available(v):
+                try:
+                    from .objects import YoloX
+                    yolo = S.scanner._engine(("yolo", v), lambda v=v: YoloX(S.mm, v))
+                except Exception:
+                    yolo = None
+                break
+        eng_name = S.db.get_setting("face_engine", "opencv")
+        try:
+            feng = S.face_engine(eng_name)
+        except Exception:
+            feng = None
+        sig = similar.zone_signature(crop, yolo, S.clip(), feng)
+        sig["engine"] = eng_name
+        sig["means"] = [n for n, ok in (("objets", yolo is not None), ("contenu (CLIP)", sig["clip"] is not None),
+                                         ("visages", feng is not None)) if ok]
+        if len(S.zone_cache) > 30:
+            S.zone_cache.pop(next(iter(S.zone_cache)))
+        S.zone_cache[key] = sig
+        return sig
+
+    @app.post("/api/zone_search")
+    def api_zone_search():
+        d = body()
+        try:
+            fid = int(d.get("id", 0))
+            sig = zone_sig(fid, d.get("box") or [0, 0, 1, 1])
+            src = [x for x in (d.get("sources") or "").split(",") if x and x != "visuel"] or None
+            res = similar.zone_search(S.db, sig, sig["engine"], float(d.get("thr") or 0.45), src)
+        except ValueError as e:
+            return err(str(e))
+        ok = set(in_scope_ids([r[0] for r in res]))
+        res = [r for r in res if r[0] in ok]
+        found = {"labels": [l for l, _ in sig["labels"]], "face": sig["face"] is not None,
+                 "clip": sig["clip"] is not None, "means": sig["means"]}
+        if d.get("ids_only"):
+            return jsonify(ids=[r[0] for r in res], total=len(res))
+        page, per = max(1, int(d.get("page", 1))), min(1000, int(d.get("per", 60)))
+        sl = res[(page - 1) * per: page * per]
+        h = search._hydrate(S.db, [r[0] for r in sl], len(res), page, per, {}, [])
+        by = {r[0]: r for r in sl}
+        for f in h["files"]:
+            _, sim_, srcs = by[f["id"]]
+            f.update(sim=sim_, why=[similar.LABELS.get(x, x) for x in srcs])
+        h.update(found=found, sources=sorted({x for r in res for x in r[2]}))
         return jsonify(h)
 
     @app.get("/api/similar_ids")

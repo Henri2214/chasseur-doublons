@@ -81,3 +81,19 @@ def test_api_similar(client, state, jeu):
 def test_api_similar_hors_perimetre(client, state, jeu, tmp_path):
     state.scope.reset([str(tmp_path / "ailleurs")])
     assert client.get("/api/similar?id=%d&thr=0.3" % jeu["base.jpg"]).get_json()["total"] == 0
+
+
+def test_recherche_par_zone(client, state, jeu):
+    """Zone tracée : objets reconnus dans la zone -> toutes les photos contenant le même objet."""
+    a, b, c = jeu["autre1.jpg"], jeu["autre2.jpg"], jeu["base.jpg"]
+    for fid, lab in ((a, "oiseau"), (b, "oiseau"), (c, "voiture")):
+        state.db.x("INSERT INTO objects(file_id, label, score, x1, y1, x2, y2) VALUES (?,?,0.9,0,0,1,1)", (fid, lab))
+    sig = {"labels": [("oiseau", 0.8)], "clip": None, "face": None}
+    res = similar.zone_search(state.db, sig, None, thr=0.45)
+    assert {i for i, _, _ in res} == {a, b} and all(w == ["objet"] for _, _, w in res)
+    assert similar.zone_search(state.db, {"labels": [], "clip": None, "face": None}, None) == []
+    # API : zone trop petite refusée ; zone valide acceptée même sans modèle (résultat vide, moyens listés)
+    assert post(client, state, "/api/zone_search", {"id": a, "box": [0.1, 0.1, 0.11, 0.11]}).status_code == 400
+    r = post(client, state, "/api/zone_search", {"id": a, "box": [0.1, 0.1, 0.9, 0.9]})
+    assert r.status_code == 200 and "found" in r.get_json()
+    assert post(client, state, "/api/zone_search", {"id": a, "box": [0, 0, 1, 1]}, token=False).status_code == 403

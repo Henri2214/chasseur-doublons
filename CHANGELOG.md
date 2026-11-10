@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.5.0 - 2026-11-10
+### Ajouté
+- **Recherche à partir d'une zone d'une photo** : dans l'aperçu plein écran, bouton « Chercher une zone » ;
+  on trace un rectangle autour d'un objet, d'un visage ou d'un détail, et toutes les photos qui contiennent
+  la même chose ressortent dans l'onglet Similaires. La zone est analysée par trois moyens combinés :
+  objets YOLOX reconnus dans la zone, visage éventuel (identification de la personne), empreinte de contenu
+  CLIP. L'onglet indique ce qui a été reconnu dans la zone ; seuil, sources, « Tout sélectionner »,
+  déplacement et suppression comme pour les photos similaires. Route `/api/zone_search`.
+
 ## 2.4.1 - 2026-11-10
 ### Ajouté
 - **Sélection par plage avec Maj** : cochez une photo, puis Maj + clic sur une autre (case ou image) ; toutes
