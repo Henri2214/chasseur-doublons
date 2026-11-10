@@ -31,12 +31,18 @@ def _x(s):
     return s.replace("&", "&amp;").replace("<", "&lt;")
 
 
-def make_docx(path, paras, comment=""):
+def make_docx(path, paras, comment="", donnees=None, entete=None):
     body = "".join("<w:p><w:r><w:t>%s</w:t></w:r></w:p>" % _x(p) for p in paras)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", "<Types/>")
         z.writestr("docProps/core.xml", "<c>%s</c>" % comment)
         z.writestr("word/document.xml", '<?xml version="1.0"?><w:document><w:body>%s</w:body></w:document>' % body)
+        if entete:
+            z.writestr("word/header1.xml", "<w:hdr><w:p><w:r><w:t>%s</w:t></w:r></w:p></w:hdr>" % _x(entete))
+        if donnees:
+            z.writestr("customXml/itemProps1.xml", "<ds:datastoreItem/>")
+            z.writestr("customXml/item1.xml", "<fiche>%s</fiche>" % "".join(
+                "<%s>%s</%s>" % (k, _x(v), k) for k, v in donnees.items()))
 
 
 def make_odt(path, paras):
@@ -178,6 +184,36 @@ def test_groupes_documents(dossier, state):
     # module désactivé : il ne reste que les copies bit à bit
     gs = dupes.compute(state.db, [str(dossier)], {"doc_content": False})
     assert [g["kind"] for g in gs] == ["exact"]
+
+
+def test_modele_rempli_par_donnees_liees(tmp_path, state):
+    """Fiches issues d'un même modèle : document.xml identique, valeurs dans customXml ou dans l'en-tête."""
+    root = tmp_path / "sav"
+    root.mkdir()
+    make_docx(root / "SAV1 - DUPONT.docx", PHRASES, donnees={"client": "Dupont SARL", "numero": "SAV100001"})
+    make_docx(root / "SAV2 - MARTIN.docx", PHRASES, donnees={"client": "Martin SAS", "numero": "SAV100002"})
+    make_docx(root / "SAV1 - DUPONT (1).docx", PHRASES, comment="x",
+              donnees={"client": "Dupont SARL", "numero": "SAV100001"})
+    make_docx(root / "lettre A.docx", RECETTE, entete="Dossier 2026-001")
+    make_docx(root / "lettre B.docx", RECETTE, entete="Dossier 2026-002")
+    assert "Martin SAS" in docs.extract(str(root / "SAV2 - MARTIN.docx"))["text"]
+    state.scanner.scan_sync(str(root))
+    gs = dupes.compute(state.db, [str(root)], {})
+    assert not [g for g in gs if g["kind"] in ("contenu", "exact")]      # aucune fausse « copie »
+    sav = next(g for g in gs if "SAV2 - MARTIN.docx" in names(state, g))
+    assert sav["kind"] == "proche"
+    par_nom = {state.db.one("SELECT name FROM files WHERE id=?", (m["id"],))["name"]: m for m in sav["members"]}
+    # les deux fiches Dupont sont repérées comme vraies copies ; la fiche Martin non
+    assert par_nom["SAV1 - DUPONT.docx"]["sub"] == par_nom["SAV1 - DUPONT (1).docx"]["sub"] is not None
+    assert par_nom["SAV2 - MARTIN.docx"]["sub"] is None
+    lettres = next(g for g in gs if "lettre A.docx" in names(state, g))
+    assert lettres["kind"] == "proche" and all(m["score"] < 100 for m in lettres["members"] if not m["ref"])
+
+
+def test_relecture_quand_la_methode_change(dossier, state):
+    state.scanner.scan_sync(str(dossier))
+    state.db.set_setting("doc_extract_version", 1)
+    assert state.scanner.scan_sync(str(dossier))["docs_new"] == 11
 
 
 def test_incremental_et_modification(dossier, state):

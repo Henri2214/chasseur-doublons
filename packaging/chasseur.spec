@@ -29,6 +29,10 @@ a = Analysis([os.path.join(ROOT, "app.py")], pathex=[ROOT], binaries=binaries, d
              noarchive=False)
 pyz = PYZ(a.pure)
 icon = os.path.join(SPECPATH, "icone.ico")
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ChasseurDoublons", console=True,
+# ChasseurDoublons.exe : sans fenêtre noire (les messages vont dans data\\journal.log).
+# ChasseurDoublons-diagnostic.exe : le même programme avec sa fenêtre de commandes, pour chercher une panne.
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ChasseurDoublons", console=False,
           icon=icon if os.path.exists(icon) else None, upx=False)
-coll = COLLECT(exe, a.binaries, a.datas, name="ChasseurDoublons", upx=False)
+exe_diag = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ChasseurDoublons-diagnostic", console=True,
+               icon=icon if os.path.exists(icon) else None, upx=False)
+coll = COLLECT(exe, exe_diag, a.binaries, a.datas, name="ChasseurDoublons", upx=False)

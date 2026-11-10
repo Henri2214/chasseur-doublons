@@ -193,10 +193,25 @@ Formats dont le contenu est lu : Word (.docx, .docm, .dotx, .doc), OpenDocument 
 pas sur « aucun »), texte (.txt, .md, .csv, .log, .html), courriels (.eml, .msg). Tous les autres fichiers
 (archives, .pst, .mbox, musique, programmes…) sont comparés bit à bit.
 
-Le texte est indexé : l'onglet **Explorer** retrouve un document ou un courriel par un mot de son contenu.
+Le texte est indexé : l'onglet **Rechercher** retrouve un document ou un courriel par un mot de son contenu.
 Un clic sur un document affiche son texte ; « Similaires » liste les documents au texte voisin.
 « MÊME CONTENU » compare le texte seul : deux documents au même texte mais aux images différentes sont
 regroupés. Vérifiez avant de supprimer.
+
+## Lancement silencieux
+
+Aucune fenêtre noire ne reste ouverte : `lancer.bat` installe ce qui manque (fenêtre visible seulement à ce
+moment-là), démarre l'application en arrière-plan et se referme ; la page s'ouvre dans le navigateur.
+`tools\raccourci.ps1` crée un raccourci sur le Bureau et dans le menu Démarrer. L'exécutable
+(`ChasseurDoublons.exe`) est lui aussi sans console.
+
+- Relancer l'application alors qu'elle tourne déjà rouvre simplement la page.
+- Les messages sont écrits dans `data\journal.log`. Pour voir la fenêtre de messages : `lancer.bat --console`
+  ou `ChasseurDoublons-diagnostic.exe`.
+- Sans page ouverte depuis 10 minutes, l'application s'arrête seule (jamais pendant une analyse) ;
+  `--arret-auto 0` désactive cet arrêt, `--arret-auto 30` le règle à 30 minutes.
+
+L'interface est claire par défaut ; le bouton « Sombre / Clair » en haut à droite change de thème.
 
 ## Quitter
 

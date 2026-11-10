@@ -318,6 +318,9 @@ class Scanner:
     def _documents(self, root, o, stats):
         """Lit le texte des documents nouveaux ou modifiés et calcule leurs empreintes de contenu."""
         from . import docs
+        if self.db.get_setting("doc_extract_version") != docs.EXTRACT_VERSION:
+            self.db.x("UPDATE files SET done_doc=0 WHERE kind='doc'")      # la lecture a changé : tout relire
+            self.db.set_setting("doc_extract_version", docs.EXTRACT_VERSION)
         lo, hi = prefix_range(root)
         want_ocr = o.get("ocr", "aucun") != "aucun"
         rows = self.db.q(

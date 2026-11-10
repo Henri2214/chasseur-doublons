@@ -51,6 +51,7 @@ class State:
         self._clip_lock = threading.Lock()
         self._face_engines = {}
         self._face_lock = threading.Lock()
+        self.last_seen = time.time()  # dernière requête reçue (arrêt automatique quand la page est fermée)
         self.zone_cache = {}          # (photo, zone) -> signature de la zone tracée
         self.psearch_refs = {}        # jeton -> {"engine": str, "embs": [vecteurs]} (photos de référence envoyées)
 
@@ -98,6 +99,12 @@ def create_app(state=None):
             abort(403)
         if request.method == "POST" and request.headers.get("X-Token") != S.token:
             abort(403)
+        S.last_seen = time.time()
+
+    @app.get("/api/ping")
+    def api_ping():
+        """Signe de vie de la page (toutes les 30 s) ; sert aussi à reconnaître une instance déjà lancée."""
+        return jsonify(app="chasseur-doublons", version=__version__)
 
     def body():
         return request.get_json(force=True, silent=True) or {}
@@ -383,8 +390,8 @@ def create_app(state=None):
             return None
 
     def placeholder(label):
-        svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#2a3040"/>'
-               '<text x="128" y="140" font-family="sans-serif" font-size="44" fill="#8b95ab" text-anchor="middle">%s</text></svg>'
+        svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#d5dce8"/>'
+               '<text x="128" y="140" font-family="sans-serif" font-size="44" fill="#5d6a80" text-anchor="middle">%s</text></svg>'
                % label[:6].upper().replace("<", ""))
         return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "max-age=3600"})
 

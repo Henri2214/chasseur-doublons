@@ -48,5 +48,16 @@ if not exist ".venv\gpu.txt" (
   echo fait> ".venv\gpu.txt"
 )
 
-python app.py %*
-pause
+rem ---- lancement silencieux : aucune fenetre noire ne reste ouverte -----------------
+rem    L'application s'arrete avec le bouton "Quitter" de la page (ou seule, 10 min apres
+rem    la fermeture de la page). Pour garder la fenetre et voir les messages :
+rem        lancer.bat --console
+set "CONSOLE="
+for %%a in (%*) do if /i "%%~a"=="--console" set "CONSOLE=1"
+if not exist ".venv\Scripts\pythonw.exe" set "CONSOLE=1"
+if defined CONSOLE (
+  python app.py %*
+  pause
+) else (
+  start "" ".venv\Scripts\pythonw.exe" app.py %*
+)

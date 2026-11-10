@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.8.0 - 2026-11-10
+### Ajouté
+- **Interface repensée, claire par défaut.** Thème clair (bouton « Sombre / Clair » en haut à droite, choix
+  mémorisé). En-tête en trois étapes : 1. le dossier, 2. ce qu'il faut comparer (types de fichiers, puis
+  reconnaissance facultative), 3. « Analyser ». Les réglages rarement utiles sont repliés dans « Options
+  avancées » et « Réglages de comparaison et d'affichage ». Libellés en clair (« Copies exactes », « Photos et
+  vidéos ressemblantes »…), onglets principaux séparés des onglets techniques, guide de démarrage en trois
+  cartes. L'onglet « Explorer » s'appelle désormais « Rechercher ».
+- **Barre de sélection flottante** : dès qu'un fichier est coché, « N fichiers cochés — Tout décocher,
+  Déplacer, Supprimer » reste visible en bas de l'écran, dans tous les onglets.
+- **Lancement silencieux** : plus de fenêtre noire. `lancer.bat` démarre l'application en arrière-plan
+  (`pythonw`) et se referme ; l'exécutable est construit sans console. Les messages vont dans
+  `data\journal.log` ; une erreur de démarrage s'affiche dans une boîte de dialogue.
+  `lancer.bat --console` et `ChasseurDoublons-diagnostic.exe` gardent la fenêtre pour chercher une panne.
+- `tools\raccourci.ps1` : raccourci « Chasseur de doublons » sur le Bureau et dans le menu Démarrer.
+- **Une seule instance** : relancer l'application rouvre simplement la page ; si le port est pris par un autre
+  programme, le suivant est utilisé.
+- **Arrêt automatique** : sans page ouverte depuis 10 minutes (jamais pendant une analyse), l'application
+  s'arrête seule. Réglable : `--arret-auto MIN` (0 = jamais). La page prévient si l'application ne répond plus.
+### Corrigé
+- Word : lecture des en-têtes, pieds de page, commentaires et des **données liées aux contrôles de contenu**
+  (`customXml`). Les fiches produites par un logiciel à partir d'un même modèle (corps du document identique,
+  valeurs stockées à part) ne sont plus prises pour des copies. Dans un groupe « VERSIONS PROCHES », les
+  fichiers au contenu strictement identique portent un repère « = » de même couleur.
+
 ## 2.7.0 - 2026-11-10
 ### Ajouté
 - **Dédoublonnage de tous les types de fichiers.** Nouvelle catégorie « Documents » (cochée par défaut, comme

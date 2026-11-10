@@ -4,8 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Chasseur de doublons</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("theme")||"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
 <style>
-:root{--bg:#12151c;--panel:#1b202b;--panel2:#232a38;--line:#2f384a;--tx:#e6e9f0;--mut:#8b95ab;--acc:#4c8dff;--ok:#3ecf8e;--warn:#f5a524;--bad:#ef5b5b}
+:root{--bg:#f3f5f9;--panel:#ffffff;--panel2:#eef1f6;--line:#d5dbe6;--tx:#1c2433;--mut:#5d6a80;--acc:#2f6fed;--ok:#168a5c;--warn:#b26a00;--bad:#d93f3f;
+  --thumb:#e3e8f0;--field:#ffffff;--hl:#dfe9ff;--okbg:#dff5ea;--warnbg:#fff4d6;--warnline:#e6c868;--infobg:#e0ecff;--infotx:#1f4fa8;--badbg:#fde3e3;--badtx:#a52828;--shadow:0 1px 3px rgba(20,30,50,.10)}
+:root[data-theme=dark]{--bg:#12151c;--panel:#1b202b;--panel2:#232a38;--line:#2f384a;--tx:#e6e9f0;--mut:#8b95ab;--acc:#4c8dff;--ok:#3ecf8e;--warn:#f5a524;--bad:#ef5b5b;
+  --thumb:#0b0d12;--field:#12151c;--hl:#243454;--okbg:#1f4d3a;--warnbg:#3a2f12;--warnline:#6b5520;--infobg:#1d3a5c;--infotx:#8fc1ff;--badbg:#4d1f1f;--badtx:#ffb3b3;--shadow:none}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -13,15 +17,17 @@ button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;p
 button:hover{border-color:var(--acc)}
 button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
 button.bad{background:var(--bad);border-color:var(--bad);color:#fff}
-button.okb{background:#1f4d3a;border-color:var(--ok)}
+button.okb{background:var(--okbg);border-color:var(--ok)}
 button:disabled{opacity:.45;cursor:not-allowed}
-input[type=text],input[type=number],input[type=date],input[type=search],select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
-header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 20px;position:sticky;top:0;z-index:20}
+input[type=text],input[type=number],input[type=date],input[type=search],select{background:var(--field);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px 0;box-shadow:var(--shadow)}
 h1{margin:0;font-size:18px;display:flex;align-items:center;gap:14px}
 h1 small{color:var(--mut);font-weight:400;font-size:12px}
-nav{display:flex;gap:4px;flex-wrap:wrap}
-nav button{border-radius:6px 6px 0 0;border-bottom:none;background:transparent}
-nav button.on{background:var(--panel2);border-color:var(--line);color:#fff}
+nav{display:flex;gap:2px;flex-wrap:wrap;margin-top:10px}
+nav button{border:none;border-bottom:3px solid transparent;border-radius:6px 6px 0 0;background:transparent;padding:9px 14px;color:var(--mut);font-weight:500}
+nav button:hover{background:var(--panel2);color:var(--tx)}
+nav button.on{border-bottom-color:var(--acc);color:var(--acc);font-weight:600}
+nav .sep{flex:1}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0}
 .row .grow{flex:1;min-width:240px}
 label.opt{display:flex;gap:6px;align-items:center;color:var(--mut)}
@@ -29,27 +35,27 @@ label.opt b{color:var(--tx);font-weight:500}
 label.opt.dis{opacity:.55;cursor:pointer}
 label.opt.dis b{text-decoration:underline dotted}
 button.dl{padding:0 6px;font-size:11px;border-color:var(--acc);color:var(--acc)}
-#mwarn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#3a2f12;border:1px solid #6b5520;font-size:13px}
-tr.hl td{background:#243454;transition:background .4s}
+#mwarn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--warnbg);border:1px solid var(--warnline);font-size:13px}
+tr.hl td{background:var(--hl);transition:background .4s}
 .card{user-select:none}
-.chip{display:inline-flex;align-items:center;gap:4px;margin:3px 4px 0 0;padding:2px 9px;border-radius:999px;background:#2a3245;border:1px solid #3a4360;cursor:pointer;font-size:12px}
+.chip{display:inline-flex;align-items:center;gap:4px;margin:3px 4px 0 0;padding:2px 9px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;font-size:12px}
 .chip:hover{background:var(--acc);color:#fff}
-.mods{display:flex;flex-wrap:wrap;gap:4px 14px;padding:6px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
-.prog{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:6px}
+.mods{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 12px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+.prog{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:6px}
 .prog>div{height:100%;background:var(--acc);width:0;transition:width .3s}
 #phase{color:var(--mut);margin-top:4px;min-height:18px}
-.bar{background:var(--panel2);border-bottom:1px solid var(--line);padding:8px 20px}
+.bar{background:var(--panel);border-bottom:1px solid var(--line);padding:8px 20px}
 main{padding:14px 20px 80px;flex:1;min-width:0}
 .tab{display:none}.tab.on{display:block}
-.group{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
+.group{background:var(--bg);box-shadow:var(--shadow);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
 .ghead{display:flex;gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
 .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
-.b-exact{background:#1f4d3a;color:var(--ok)}.b-contenu,.b-mail{background:#1d3a5c;color:#8fc1ff}.b-proche{background:#4d3a14;color:var(--warn)}.b-visuel{background:#4d3a14;color:var(--warn)}.b-warn{background:#4d1f1f;color:#ffb3b3}
+.b-exact{background:var(--okbg);color:var(--ok)}.b-contenu,.b-mail{background:var(--infobg);color:var(--infotx)}.b-proche,.b-visuel{background:var(--warnbg);color:var(--warn)}.b-warn{background:var(--badbg);color:var(--badtx)}
 .ghead .sp{flex:1}.ghead small{color:var(--mut)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--w,190px),1fr));gap:12px;padding:12px}
-.card{background:var(--bg);border:2px solid transparent;border-radius:8px;position:relative;overflow:hidden}
-.card.sel{border-color:var(--bad)}
-.thumb{background:#0b0d12;cursor:zoom-in;display:flex;align-items:center;justify-content:center;position:relative;height:calc(var(--w,190px)*.8)}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:8px;position:relative;overflow:hidden}
+.card.sel{border-color:var(--bad);box-shadow:0 0 0 2px var(--badbg)}
+.thumb{background:var(--thumb);cursor:zoom-in;display:flex;align-items:center;justify-content:center;position:relative;height:calc(var(--w,190px)*.8)}
 .thumb img{max-width:100%;max-height:100%;object-fit:contain}
 .chk{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);border-radius:5px;cursor:pointer;padding:5px 6px;line-height:0}
 .chk input{width:18px;height:18px;pointer-events:none}
@@ -71,8 +77,26 @@ main{padding:14px 20px 80px;flex:1;min-width:0}
 #lbc .doc h4{margin:0 0 10px;font-size:15px}#lbc .doc .hd{color:#555;font-size:12px;margin-bottom:12px;border-bottom:1px solid #ddd;padding-bottom:8px;white-space:normal}
 #lbc iframe{width:min(1000px,94vw);height:76vh;border:0;background:#fff;border-radius:8px}
 .snip{color:var(--mut);font-size:11px;margin-top:3px;max-height:4.2em;overflow:hidden;font-style:italic}
-#quit{margin-left:auto}#lbcap a{text-decoration:none}#lbcap a button{color:inherit}
-#bye{position:fixed;inset:0;background:var(--bg,#151923);z-index:99;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;font-size:18px;text-align:center}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.steps{display:flex;flex-wrap:wrap;gap:12px;align-items:stretch}
+.step{display:flex;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;align-items:flex-start}
+.step.s1{flex:2;min-width:320px}.step.s2{flex:3;min-width:360px}.step.s3{align-items:center}
+.num{flex:none;width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.sbody{flex:1;min-width:0}.slab{font-weight:600;font-size:13px;margin-bottom:6px}.slab small{font-weight:400;color:var(--mut)}
+.slab+.pills{margin-bottom:8px}.sbody .row{margin:0}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills label.opt{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px;cursor:pointer;color:var(--tx)}
+.pills label.opt:has(input:checked){background:var(--hl);border-color:var(--acc)}
+.pills label.opt select{border:none;background:transparent;padding:0 2px}
+button.big{font-size:16px;font-weight:600;padding:12px 26px;border-radius:10px}
+details.adv{margin-top:8px}details.adv>summary{cursor:pointer;color:var(--mut);font-size:13px;padding:2px 0;user-select:none}
+details.adv>summary:hover{color:var(--acc)}details.adv[open]>summary{margin-bottom:6px}
+.guide{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin:30px auto;max-width:980px}
+.guide>div{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;text-align:left;box-shadow:var(--shadow)}
+.guide b{display:block;font-size:15px;margin:6px 0 4px;color:var(--tx)}.guide .ic{font-size:26px}
+#selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;display:none;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--acc);border-radius:12px;padding:10px 16px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+#lbcap a{text-decoration:none}#lbcap a{text-decoration:none}#lbcap a button{color:inherit}
+#bye{position:fixed;inset:0;background:var(--bg);z-index:99;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;font-size:18px;text-align:center}
 #lbc.zone img{cursor:crosshair}
 #zrect{position:absolute;border:2px solid #4c8dff;background:rgba(76,141,255,.22);pointer-events:none;display:none}
 #lb .cap{color:#fff;margin-top:10px;text-align:center;max-width:90vw;word-break:break-all}
@@ -83,30 +107,30 @@ main{padding:14px 20px 80px;flex:1;min-width:0}
 #dirs div{padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
 #dirs div:hover{background:var(--panel2)}
 .wrap{display:flex;align-items:flex-start}
-#side{display:none;width:270px;flex:none;position:sticky;top:var(--top,120px);height:calc(100vh - var(--top,120px));overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:8px 0;font-size:13px}
+#side{display:none;width:270px;flex:none;position:sticky;top:0;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:8px 0;font-size:13px}
 .sh{padding:2px 10px 8px;display:flex;gap:6px;align-items:center;color:var(--mut);font-size:12px}
 .sh span{flex:1}.sh button{padding:1px 8px}
 .tn{display:flex;align-items:center;gap:6px;padding:3px 8px;cursor:pointer;border-left:3px solid transparent}
 .tn:hover{background:var(--panel2)}
-.tn img{width:34px;height:34px;border-radius:5px;object-fit:cover;flex:none;background:#0b0d12}
+.tn img{width:34px;height:34px;border-radius:5px;object-fit:cover;flex:none;background:var(--thumb)}
 .tn .tnm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tn small{color:var(--mut)}
-.tn.root{border-left-color:var(--acc);background:#1a2640}
-.tn.over{background:#1f4d3a;outline:2px dashed var(--ok);outline-offset:-2px}
+.tn.root{border-left-color:var(--acc);background:var(--hl)}
+.tn.over{background:var(--okbg);outline:2px dashed var(--ok);outline-offset:-2px}
 .tg{width:12px;color:var(--mut);text-align:center;flex:none}
 body.dragging .tn *{pointer-events:none}
 .card[draggable=true]{cursor:grab}
-#toast{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:99}
-#toast div{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--ok);padding:10px 14px;border-radius:6px;max-width:440px}
+#toast{position:fixed;right:16px;bottom:76px;display:flex;flex-direction:column;gap:8px;z-index:99}
+#toast div{box-shadow:var(--shadow);background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--ok);padding:10px 14px;border-radius:6px;max-width:440px}
 #toast div.err{border-left-color:var(--bad)}
 #toast button{padding:1px 10px;margin-left:10px}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
 .pcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center;cursor:pointer}
-.pcard img{width:110px;height:110px;border-radius:50%;object-fit:cover;background:#0b0d12}
+.pcard img{width:110px;height:110px;border-radius:50%;object-fit:cover;background:var(--thumb)}
 .pcard.over{outline:2px dashed var(--ok)}
 .pcard .pn{font-weight:600;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
-.face{position:relative;border:2px solid transparent;border-radius:8px;overflow:hidden;cursor:pointer;background:#0b0d12}
+.face{position:relative;border:2px solid transparent;border-radius:8px;overflow:hidden;cursor:pointer;background:var(--thumb)}
 .face img{width:100%;aspect-ratio:1;display:block;object-fit:cover}
 .face.sel{border-color:var(--acc)}
 .face .lk{position:absolute;right:4px;top:4px;font-size:11px;background:rgba(0,0,0,.7);border-radius:4px;padding:0 4px}
@@ -115,9 +139,9 @@ body.dragging .tn *{pointer-events:none}
 table{border-collapse:collapse;width:100%}
 td,th{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;font-size:13px;vertical-align:top}
 th{color:var(--mut);font-weight:500}
-.lic{border-left:4px solid var(--warn);background:#2b2414;padding:8px 12px;border-radius:6px;font-size:13px}
+.lic{border-left:4px solid var(--warn);background:var(--warnbg);padding:8px 12px;border-radius:6px;font-size:13px}
 .pair{display:flex;gap:14px;flex-wrap:wrap}
-.pair>div{flex:1;min-width:260px;background:#0b0d12;border-radius:8px;display:flex;align-items:center;justify-content:center;height:46vh}
+.pair>div{flex:1;min-width:260px;background:var(--thumb);border-radius:8px;display:flex;align-items:center;justify-content:center;height:46vh}
 .pair img{max-width:100%;max-height:100%}
 .muted{color:var(--mut)}
 code{background:var(--bg);padding:1px 5px;border-radius:4px}
@@ -125,41 +149,45 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 </head>
 <body>
 <header id="head">
-  <h1>🔍 Chasseur de doublons <small>v__VERSION__ · local, rien ne quitte votre PC</small><button id="quit" class="bad" title="Arrête complètement l'application : plus aucun processus ne tourne en arrière-plan. À utiliser quand vous avez terminé.">⏻ Quitter</button></h1>
-  <div class="row">
-    <input type="text" id="path" class="grow" placeholder="Dossier à analyser (ex. D:\Photos ou /mnt/nas/photos)">
-    <button id="browse">Parcourir…</button>
-    <button id="go" class="pri">Analyser</button>
-    <button id="stop" style="display:none">Annuler</button>
-  </div>
-  <div class="row">
-    <div class="mods">
+  <div class="top"><h1>🔍 Chasseur de doublons <small>v__VERSION__ · local, rien ne quitte votre PC</small></h1><span style="flex:1"></span>
+    <button id="theme" title="Passer du thème clair au thème sombre">🌙 Sombre</button>
+    <button id="quit" class="bad" title="Arrête complètement l'application : plus aucun processus ne tourne en arrière-plan. À utiliser quand vous avez terminé.">⏻ Quitter</button></div>
+  <div class="steps">
+    <div class="step s1"><span class="num">1</span><div class="sbody"><div class="slab">Choisissez le dossier à analyser</div>
+      <div class="row"><input type="text" id="path" class="grow" placeholder="ex. D:\Photos ou C:\Users\vous\Documents"><button id="browse">📁 Parcourir…</button></div></div></div>
+    <div class="step s2"><span class="num">2</span><div class="sbody"><div class="slab">Que faut-il comparer ?</div>
+      <div class="pills">
       <label class="opt"><input type="checkbox" id="o_images" checked><b>Images</b></label>
       <label class="opt"><input type="checkbox" id="o_videos" checked><b>Vidéos</b></label>
       <label class="opt" title="Word, PDF, Excel, PowerPoint, OpenDocument, texte, courriels (.eml, .msg) : comparés bit à bit ET par leur contenu"><input type="checkbox" id="o_docs" checked><b>Documents</b></label>
-      <label class="opt" title="Tous les autres fichiers (archives, programmes, musique...) : comparés bit à bit (SHA-256)"><input type="checkbox" id="o_others" checked><b>Autres</b></label>
-      <label class="opt">min. <input type="number" id="min_kb" value="0" min="0" style="width:70px"> Ko</label>
-    </div>
-    <div class="mods" title="Modules activables séparément">
-      <label class="opt"><input type="checkbox" id="m_exact" checked><b>Exacts</b></label>
-      <label class="opt"><input type="checkbox" id="m_visual" checked><b>Visuel</b></label>
-      <label class="opt" title="Lit le texte des documents (Word, PDF, tableurs, courriels...) pour retrouver le même contenu dans des fichiers différents, les versions proches d'un document, et pour chercher un mot dans l'onglet Explorer. Les PDF scannés sont lus par OCR si « Texte » n'est pas sur « aucun »."><input type="checkbox" id="m_doctext" checked><b>Contenu des documents</b></label>
+      <label class="opt" title="Tous les autres fichiers (archives, programmes, musique...) : comparés bit à bit (SHA-256)"><input type="checkbox" id="o_others" checked><b>Autres fichiers</b></label>
+      </div>
+      <div class="slab">Reconnaissance <small>— facultatif, plus lent : retrouver des personnes, des objets, du texte</small></div>
+      <div class="pills">
       <label class="opt" id="l_faces"><input type="checkbox" id="m_faces"><b>Visages</b></label>
       <label class="opt" id="l_objects"><input type="checkbox" id="m_objects"><b>Objets</b></label>
-      <label class="opt" id="l_ocr">Texte <select id="m_ocr"><option value="aucun">aucun</option><option value="auto">captures/documents</option><option value="toutes">toutes les images</option></select></label>
-      <label class="opt" id="l_clip"><input type="checkbox" id="m_clip"><b>IA CLIP</b></label>
-      <label class="opt"><input type="checkbox" id="m_quality" checked><b>Qualité</b></label>
+      <label class="opt" id="l_ocr" title="Lit le texte visible dans les images (captures, scans) et dans les PDF scannés">Texte des images <select id="m_ocr"><option value="aucun">aucun</option><option value="auto">captures/documents</option><option value="toutes">toutes les images</option></select></label>
+      <label class="opt" id="l_clip"><input type="checkbox" id="m_clip"><b>Recherche par description (IA)</b></label>
+      </div></div></div>
+    <div class="step s3"><span class="num">3</span><button id="go" class="pri big">▶ Analyser</button><button id="stop" class="big" style="display:none">■ Annuler</button></div>
+  </div>
+  <details class="adv" id="adv"><summary>⚙ Options avancées</summary>
+    <div class="mods" title="Modules activables séparément">
+      <label class="opt"><input type="checkbox" id="m_exact" checked><b>Copies exactes</b></label>
+      <label class="opt"><input type="checkbox" id="m_visual" checked><b>Photos et vidéos ressemblantes</b></label>
+      <label class="opt" title="Lit le texte des documents (Word, PDF, tableurs, courriels...) pour retrouver le même contenu dans des fichiers différents, les versions proches d'un document, et pour chercher un mot dans l'onglet Rechercher. Les PDF scannés sont lus par OCR si « Texte » n'est pas sur « aucun »."><input type="checkbox" id="m_doctext" checked><b>Contenu des documents</b></label>
+      <label class="opt"><input type="checkbox" id="m_quality" checked><b>Qualité des photos (netteté)</b></label>
       <label class="opt" title="Par défaut, seuls les fichiers nouveaux ou modifiés sont analysés (les autres sont repris de l'index, c'est pourquoi une 2e analyse est quasi instantanée). Cochez pour tout recalculer : visages, objets, empreintes. Les regroupements de personnes de ce dossier seront refaits."><input type="checkbox" id="m_force"><b>Tout réanalyser</b></label>
+      <label class="opt">ignorer les fichiers de moins de <input type="number" id="min_kb" value="0" min="0" style="width:70px"> Ko</label>
       <label class="opt">vidéos <select id="vprec"><option value="6">6 images</option><option value="12" selected>12 images</option><option value="24">24 images</option></select></label>
       <label class="opt">visages <select id="fdet"><option value="rapide">rapide</option><option value="equilibre" selected>équilibré</option><option value="precis">précis</option></select></label>
-    </div>
-    <div id="mwarn"></div>
-  </div>
+    </div></details>
+  <div id="mwarn"></div>
   <div class="prog" id="progw" style="display:none"><div id="pb"></div></div>
   <div id="phase"></div>
   <nav id="tabs">
-    <button data-t="dup" class="on">Doublons</button><button data-t="per">Personnes</button><button data-t="exp">Explorer</button><button data-t="sim">Similaires</button><button data-t="ps">Recherche de personne</button>
-    <button data-t="cal">Étalonnage</button><button data-t="rep">Rapport</button><button data-t="jou">Journal</button><button data-t="set">Réglages</button>
+    <button data-t="dup" class="on">🗂 Doublons</button><button data-t="exp">🔎 Rechercher</button><button data-t="sim">✨ Similaires</button><button data-t="per">👥 Personnes</button><button data-t="ps">🙂 Trouver une personne</button>
+    <span class="sep"></span><button data-t="cal">Étalonnage</button><button data-t="rep">Rapport</button><button data-t="jou">Journal</button><button data-t="set">⚙ Réglages</button>
   </nav>
 </header>
 
@@ -169,22 +197,19 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 
 <!-- ============ DOUBLONS ============ -->
 <section class="tab on" id="t_dup">
-  <div class="bar row" id="dbar" style="display:none;margin:-14px -20px 12px">
-    <span id="stats"></span><span style="flex:1"></span>
-    <label class="opt">rigueur <select id="rig"><option value="tres_strict">très stricte</option><option value="strict" selected>stricte (recommandé)</option><option value="normal">normale</option><option value="large">large</option><option value="etalonne" id="rig_cal" disabled>étalonnée</option></select></label>
-    <label class="opt" title="Deux photos de dates de prise de vue EXIF différentes ne sont jamais groupées. Sans date EXIF, le contrôle est ignoré et signalé."><input type="checkbox" id="o_exif" checked><b>Dates EXIF</b></label>
-    <label class="opt" id="l_cd"><input type="checkbox" id="o_clipd"><b>IA</b> ≥ <input type="number" id="clip_thr" value="0.96" step="0.01" min="0.85" max="0.99" style="width:70px"></label>
-    <select id="f_kind"><option value="all">Tous</option><option value="exact">Identiques (bit à bit)</option><option value="visuel">Photos / vidéos similaires</option><option value="contenu">Documents : même contenu</option><option value="proche">Documents : versions proches</option><option value="mail">Courriels en double</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents</option><option value="other">Autres fichiers</option></select>
-    <label class="opt" title="Deux documents sont des « versions proches » si cette part de leur texte est commune.">documents ≥ <select id="doc_thr"><option value="0.95">95 %</option><option value="0.9">90 %</option><option value="0.8" selected>80 %</option><option value="0.7">70 %</option><option value="0.6">60 %</option><option value="0.5">50 %</option></select></label>
-    <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option></select>
-    <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures">
-    <label class="opt">par page <select id="perg"><option value="10">10 groupes</option><option value="20" selected>20</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select></label>
-    <span class="muted" title="Cochez une photo, puis maintenez Maj et cliquez sur une autre : toutes celles entre les deux sont cochées.">⇧ Maj + clic : plage</span>
-    <button id="selall" title="Coche TOUTES les photos de tous les groupes affichés (toutes les pages), y compris la référence">Tout sélectionner</button><button id="selnone">Tout désélectionner</button>
-    <select id="f_auto"><option value="">Sélection auto…</option><option value="best">Garder la meilleure (netteté, résolution, yeux ouverts)</option><option value="oldest">Garder le plus ancien</option><option value="newest">Garder le plus récent</option><option value="biggest">Garder le plus lourd</option><option value="res">Garder la meilleure résolution</option><option value="shortpath">Garder le chemin le plus court</option><option value="none">Tout désélectionner</option></select>
-    <button id="mv" disabled>Déplacer…</button><button id="rm" class="bad" disabled>Supprimer</button>
+  <div class="bar" id="dbar" style="display:none;margin:-14px -20px 12px">
+    <div class="row"><span id="stats"></span><span style="flex:1"></span>
+      <select id="f_kind"><option value="all">Afficher : tout</option><option value="exact">Identiques (bit à bit)</option><option value="visuel">Photos / vidéos similaires</option><option value="contenu">Documents : même contenu</option><option value="proche">Documents : versions proches</option><option value="mail">Courriels en double</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents</option><option value="other">Autres fichiers</option></select> <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option></select> <select id="f_auto"><option value="">✔ Cocher automatiquement…</option><option value="best">Garder la meilleure (netteté, résolution, yeux ouverts)</option><option value="oldest">Garder le plus ancien</option><option value="newest">Garder le plus récent</option><option value="biggest">Garder le plus lourd</option><option value="res">Garder la meilleure résolution</option><option value="shortpath">Garder le chemin le plus court</option><option value="none">Tout désélectionner</option></select> <button id="selall" title="Coche TOUTES les photos de tous les groupes affichés (toutes les pages), y compris la référence">Tout sélectionner</button><button id="selnone">Tout désélectionner</button> <button id="mv" disabled>Déplacer…</button><button id="rm" class="bad" disabled>Supprimer</button></div>
+    <details class="adv" id="dadv"><summary>⚙ Réglages de comparaison et d'affichage</summary><div class="row">
+      <label class="opt">rigueur <select id="rig"><option value="tres_strict">très stricte</option><option value="strict" selected>stricte (recommandé)</option><option value="normal">normale</option><option value="large">large</option><option value="etalonne" id="rig_cal" disabled>étalonnée</option></select></label> <label class="opt" title="Deux photos de dates de prise de vue EXIF différentes ne sont jamais groupées. Sans date EXIF, le contrôle est ignoré et signalé."><input type="checkbox" id="o_exif" checked><b>Dates EXIF</b></label> <label class="opt" id="l_cd"><input type="checkbox" id="o_clipd"><b>IA</b> ≥ <input type="number" id="clip_thr" value="0.96" step="0.01" min="0.85" max="0.99" style="width:70px"></label> <label class="opt" title="Deux documents sont des « versions proches » si cette part de leur texte est commune.">documents ≥ <select id="doc_thr"><option value="0.95">95 %</option><option value="0.9">90 %</option><option value="0.8" selected>80 %</option><option value="0.7">70 %</option><option value="0.6">60 %</option><option value="0.5">50 %</option></select></label>
+      <label class="opt">taille des miniatures <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures"></label> <label class="opt">par page <select id="perg"><option value="10">10 groupes</option><option value="20" selected>20</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select></label>
+      <span class="muted" title="Cochez un fichier, puis maintenez Maj et cliquez sur un autre : tous ceux entre les deux sont cochés.">⇧ Maj + clic : cocher une plage</span></div></details>
   </div>
-  <div id="res"><div class="empty">Indiquez un dossier puis cliquez sur « Analyser ». La première analyse indexe tout ; les suivantes ne traitent que les nouveautés.</div></div>
+  <div id="res"><div class="guide">
+    <div><span class="ic">📁</span><b>1. Choisissez un dossier</b>Photos, documents, téléchargements… tout le contenu du dossier et de ses sous-dossiers est examiné.</div>
+    <div><span class="ic">▶</span><b>2. Lancez l'analyse</b>La première fois, tout est indexé. Les fois suivantes, seuls les fichiers nouveaux ou modifiés sont relus.</div>
+    <div><span class="ic">🗂</span><b>3. Triez les doublons</b>Les fichiers en double sont regroupés. Cochez ceux à retirer, puis déplacez-les ou supprimez-les. Rien n'est supprimé sans votre accord.</div>
+  </div></div>
 </section>
 
 <!-- ============ PERSONNES ============ -->
@@ -219,7 +244,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 <!-- ============ SIMILAIRES ============ -->
 <section class="tab" id="t_sim">
   <div class="panel"><h3>Photos similaires</h3>
-    <p class="muted">Cliquez sur « Similaires » sous n'importe quelle photo (onglet Doublons, Explorer ou dans l'aperçu plein écran) : toutes les photos qui ressemblent à celle-là sortent ici, même si ce ne sont pas des doublons. Quatre sources sont combinées : l'empreinte visuelle (recadrage, retouche, compression — fonctionne sans aucun modèle), les mêmes personnes (visages regroupés), les mêmes objets (YOLOX) et le même contenu (CLIP).</p>
+    <p class="muted">Cliquez sur « Similaires » sous n'importe quelle photo (onglet Doublons, Rechercher ou dans l'aperçu plein écran) : toutes les photos qui ressemblent à celle-là sortent ici, même si ce ne sont pas des doublons. Quatre sources sont combinées : l'empreinte visuelle (recadrage, retouche, compression — fonctionne sans aucun modèle), les mêmes personnes (visages regroupés), les mêmes objets (YOLOX) et le même contenu (CLIP).</p>
     <div class="row" id="sim_head"><span class="muted">Aucune photo de référence pour l'instant.</span></div>
     <div class="row">
       <label class="opt" title="Plus bas : plus de photos, moins proches.">Ressemblance minimale <input type="range" id="sim_thr" min="0.30" max="0.95" step="0.01" value="0.55" style="width:200px"> <b id="sim_thr_v">0,55</b></label>
@@ -295,6 +320,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
   <div id="dirs"></div>
   <div class="row" style="justify-content:flex-end;margin:0"><button id="mcancel">Annuler</button><button id="mok" class="pri">Choisir ce dossier</button></div>
 </div></div>
+<div id="selbar"><b id="selcount"></b><button id="sb_none">Tout décocher</button><button id="sb_mv">📂 Déplacer…</button><button id="sb_rm" class="bad">🗑 Supprimer</button></div>
 <div id="toast"></div>
 <div id="bye"><div>✅ Chasseur de doublons est arrêté.</div><small class="muted">Plus aucun processus ne tourne. Vous pouvez fermer cet onglet.<br>Pour revenir, relancez l'application.</small></div>
 
@@ -323,7 +349,7 @@ const COLORS=["#4c8dff","#3ecf8e","#f5a524","#c77dff","#ff7a90","#2ec4b6"];
 $("#tabs").onclick=e=>{const b=e.target.closest("[data-t]");if(!b)return;showTab(b.dataset.t)};
 function showTab(t){curTab=t;document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x.dataset.t===t));
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.id==="t_"+t));
-  ({sim:()=>{if(simRef)simRun(simpage)},ps:psInit,per:loadPersons,exp:()=>{loadFacets();if(!$("#xres").innerHTML)xsearch(1)},cal:calNext,rep:loadReport,jou:loadJournal,set:loadSettings}[t]||(()=>{}))();setTop()}
+  ({sim:()=>{if(simRef)simRun(simpage)},ps:psInit,per:loadPersons,exp:()=>{loadFacets();if(!$("#xres").innerHTML)xsearch(1)},cal:calNext,rep:loadReport,jou:loadJournal,set:loadSettings}[t]||(()=>{}))();majSelbar()}
 
 // ---------------------------------------------------------------- capacités
 async function loadCaps(){
@@ -467,7 +493,7 @@ function cardHtml(f,g,selset){
   if(f.sim!=null)tags+=`<span class="tag" style="background:${f.sim>=0.6?"#3ecf8e":f.sim>=0.45?"#f5a524":"#ef5b5b"}" title="Ressemblance du visage avec la référence (cosinus ${f.sim})">${Math.round(f.sim*100)} %</span>`+(f.person_name&&!f.known?`<span class="tag" style="background:#4c8dff" title="Visage déjà rangé dans cette personne">${esc(f.person_name)}</span>`:"");
   if(f.best)tags+=`<span class="tag" style="background:#ffd166" title="Meilleure photo du groupe (netteté, résolution, yeux ouverts) – score ${f.quality}">★ meilleure</span>`;
   if(f.closed_eyes)tags+=`<span class="tag" style="background:#ff9f80" title="Yeux probablement fermés">yeux fermés</span>`;
-  if(g&&f.sub!=null&&g.kind!=="exact"){const ci=g._subs.indexOf(f.sub);tags+=`<span class="tag" style="background:${COLORS[ci%COLORS.length]}" title="Identique bit à bit aux fichiers de même couleur">=</span>`}
+  if(g&&f.sub!=null&&g.kind!=="exact"){const ci=g._subs.indexOf(f.sub);tags+=`<span class="tag" style="background:${COLORS[ci%COLORS.length]}" title="${g.media==="doc"?"Même contenu que les fichiers de même couleur : ce sont eux, les vrais doublons de ce groupe":"Identique bit à bit aux fichiers de même couleur"}">=</span>`}
   const isDoc=f.kind==="doc"||f.kind==="other";
   const docm=f.kind==="doc"?[f.pages?f.pages+" p.":"",f.words?f.words+" mots":(f.method==="erreur"?"contenu illisible":f.method?"sans texte":"contenu non lu"),f.method==="ocr"?"OCR":"",f.method==="approx"?"lecture approximative":""].filter(Boolean).join(" · "):"";
   const date=isDoc?(f.mdate?`<span title="Date d'envoi du courriel">✉ ${fmtDate(f.mdate)}${f.sender?" · "+esc(f.sender):""}</span>`:`<span>modifié ${fmtDate(f.mtime)}</span>`):f.taken?`<span title="Date de prise de vue EXIF">📷 ${fmtDate(f.taken,true)}</span>`:`<span title="Pas de date EXIF (le contrôle de date est ignoré). Date de modification du fichier :">⚠ sans EXIF · modifié ${fmtDate(f.mtime)}</span>`;
@@ -480,7 +506,7 @@ function cardHtml(f,g,selset){
 }
 function renderGroups(){
   const d=gdata;byId={};
-  $("#dbar").style.display="flex";setTop();
+  $("#dbar").style.display="block";
   $("#stats").innerHTML=`<b>${d.summary.groups}</b> groupes · ${d.summary.files} fichiers · récupérable ≈ <b>${fmtSize(d.summary.waste)}</b>`;
   if(!d.total){$("#res").innerHTML=`<div class="empty" style="font-size:18px">${d.summary.groups?"Aucun groupe pour ce filtre.":"🎉 Aucun doublon trouvé avec cette rigueur.<br><small class='muted'>Essayez une rigueur plus large ou vérifiez les modules cochés.</small>"}</div>`;updBar();return}
   let h=pager(d.total,d.page,d.per,"gp");
@@ -504,6 +530,7 @@ function updBar(){
   $("#sim_rm").disabled=$("#sim_mv").disabled=!ssel.size;$("#sim_rm").textContent=ssel.size?`Supprimer (${ssel.size})`:"Supprimer";
   $("#ps_rm").disabled=$("#ps_mv").disabled=!psel.size;$("#ps_rm").textContent=psel.size?`Supprimer (${psel.size})`:"Supprimer";
   $("#xrm").disabled=$("#xmv").disabled=!xsel.size;$("#xrm").textContent=xsel.size?`Supprimer (${xsel.size})`:"Supprimer";
+  majSelbar();
 }
 $("#f_auto").onchange=async e=>{
   const m=e.target.value;e.target.value="";if(!m)return;
@@ -602,7 +629,7 @@ function view(f){
 $("#quit").onclick=async()=>{
   if(!confirm("Arrêter complètement Chasseur de doublons ?\n\nL'analyse en cours (s'il y en a une) sera interrompue ; l'index déjà construit est conservé."))return;
   try{await api("/api/quit",{})}catch(e){}
-  clearTimeout(pollT);$("#bye").style.display="flex";setTimeout(()=>{try{window.close()}catch(e){}},600)};
+  arrete=true;clearTimeout(pollT);$("#bye").style.display="flex";setTimeout(()=>{try{window.close()}catch(e){}},600)};
 function closeLb(){zoneOff();$("#lb").style.display="none";$("#lbc").innerHTML=""}
 // ---- tracé d'une zone sur la photo agrandie
 let zoneF=null,zoneDrag=null;
@@ -665,7 +692,14 @@ function refreshAll(){if(gdata)loadGroups();if($("#xres").innerHTML)xsearch(xpag
 let scanRoot="",treeRoot="",tree={},ver=0,dragIds=[],hoverP=null,hoverT=0;
 const parentOf=p=>{const q=p.length>1?p.replace(/[\\/]+$/,""):p;const r=q.replace(/[\\/][^\\/]*$/,"");if(r===q)return p;if(r==="")return "/";return /^[A-Za-z]:$/.test(r)?r+"\\":r};
 const baseName=p=>p.replace(/[\\/]+$/,"").split(/[\\/]/).pop()||p;
-function setTop(){document.documentElement.style.setProperty("--top",$("#head").offsetHeight+"px")}
+function setTop(){}
+// ---- thème clair / sombre (mémorisé sur ce navigateur)
+function majTheme(){const d=document.documentElement.dataset.theme==="dark";$("#theme").textContent=d?"☀ Clair":"🌙 Sombre"}
+$("#theme").onclick=()=>{const t=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=t;try{localStorage.setItem("theme",t)}catch(e){}majTheme()};majTheme();
+// ---- barre de sélection flottante : les actions restent à portée de main quel que soit le défilement
+const SELTAB={dup:()=>[sel,"#rm","#mv","#selnone"],exp:()=>[xsel,"#xrm","#xmv","#xnone"],sim:()=>[ssel,"#sim_rm","#sim_mv","#sim_none"],ps:()=>[psel,"#ps_rm","#ps_mv","#ps_none"]};
+function majSelbar(){const t=SELTAB[curTab],n=t?t()[0].size:0;$("#selbar").style.display=n?"flex":"none";if(n)$("#selcount").textContent=n+" fichier"+(n>1?"s":"")+" coché"+(n>1?"s":"")}
+[["#sb_rm",1],["#sb_mv",2],["#sb_none",3]].forEach(([b,k])=>$(b).onclick=()=>{const t=SELTAB[curTab];if(t)$(t()[k]).click()});
 window.addEventListener("resize",setTop);
 async function loadDir(p){const t=tree[p]=tree[p]||{open:false};try{t.dirs=(await api("/api/dirs?p="+enc(p))).dirs}catch(e){t.dirs=[]}}
 async function initTree(){tree={};treeRoot=parentOf(scanRoot);tree[treeRoot]={open:true};tree[scanRoot]={open:true};
@@ -981,6 +1015,10 @@ $("#browse").onclick=()=>pickDir("Choisir le dossier à analyser",p=>$("#path").
 
 plage("#res",sel);plage("#xres",xsel);plage("#sim_res",ssel);plage("#ps_res",psel);
 loadCaps().then(poll).catch(e=>toast(e.message,1));setTop();
+// signe de vie : tant qu'une page est ouverte, l'application reste en route ; si elle ne répond plus, on le dit
+let pingKo=0,arrete=false;
+setInterval(async()=>{if(arrete)return;try{await api("/api/ping");pingKo=0}catch(e){if(++pingKo>=3){arrete=true;
+  $("#bye").innerHTML='<div>⏹ Chasseur de doublons ne répond plus.</div><small class="muted">L\'application a été arrêtée (bouton Quitter, ou arrêt automatique après une longue inactivité).<br>Relancez-la, puis rechargez cette page.</small><button onclick="location.reload()">Recharger la page</button>';$("#bye").style.display="flex"}}},30000);
 </script>
 </body>
 </html>

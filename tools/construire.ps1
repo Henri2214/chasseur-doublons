@@ -81,8 +81,15 @@ if (-not $SansModeles) {
 Chasseur de doublons $version - application autonome
 ====================================================
 
-Lancement : double-clic sur ChasseurDoublons.exe. Une fenetre noire s'ouvre (le moteur) et la page
-s'affiche dans votre navigateur (http://127.0.0.1:8765). Fermer la fenetre noire arrete l'application.
+Lancement : double-clic sur ChasseurDoublons.exe. Aucune fenetre ne s'ouvre : la page s'affiche
+directement dans votre navigateur (http://127.0.0.1:8765).
+
+Pour arreter : bouton "Quitter" en haut a droite de la page. Si vous fermez seulement l'onglet,
+l'application s'arrete seule au bout de 10 minutes (jamais pendant une analyse). Un second
+double-clic rouvre simplement la page.
+
+En cas de probleme : lancez ChasseurDoublons-diagnostic.exe (meme programme, avec sa fenetre de
+messages) ou lisez data\journal.log.
 
 Tout reste sur ce PC : aucune photo n'est envoyee sur Internet.
 

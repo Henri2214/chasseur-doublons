@@ -352,7 +352,8 @@ def compute(db, roots, opts, progress=None):
             if progress:
                 progress("Comparaison du contenu des documents")
             thr = max(0.3, min(0.99, float(opts.get("doc_thr", 0.8))))
-            doc_groups = [(kind, [(drep[i], s_) for i, s_ in mem]) for kind, mem in docs.groups(db, list(drep), thr, progress)]
+            doc_groups = [(kind, [(drep[i], s_, c) for i, s_, c in mem])
+                          for kind, mem in docs.groups(db, list(drep), thr, progress)]
 
     if opts.get("clip_dupes"):
         _clip_links(db, reps, F, P, use_exif, float(opts.get("clip_thr", 0.96)), link)
@@ -377,10 +378,14 @@ def compute(db, roots, opts, progress=None):
         used.update(ks)
     for gk, mem in doc_groups:
         ml = []
-        for n, (k, s_) in enumerate(mem):
-            ml += [member(f, k, s_, n == 0 and j == 0) for j, f in enumerate(reps[k])]
+        for n, (k, s_, c) in enumerate(mem):
+            for j, f in enumerate(reps[k]):
+                m = member(f, k, s_, n == 0 and j == 0)
+                if c is not None and gk == "proche":
+                    m["sub"] = c          # même contenu que les autres membres de même repère
+                ml.append(m)
         groups.append({"id": len(groups) + 1, "kind": gk, "media": "doc", "members": ml, "nodate": False})
-        used.update(k for k, _ in mem)
+        used.update(k for k, _, _ in mem)
     for k, g in enumerate(reps):
         if len(g) > 1 and k not in used:
             groups.append({"id": len(groups) + 1, "kind": "exact", "media": F[g[0]]["kind"], "nodate": False,

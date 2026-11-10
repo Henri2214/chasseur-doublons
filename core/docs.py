@@ -36,6 +36,7 @@ FAMILY_LABELS = {"word": "Word / texte mis en forme", "pdf": "PDF", "tableur": "
                  "presentation": "Présentation", "texte": "Texte", "mail": "Courriel"}
 EXT_FAMILY = {e: f for f, s in FAMILIES.items() for e in s}
 
+EXTRACT_VERSION = 2               # à incrémenter quand la lecture change : les documents sont relus
 MAX_BYTES = 200 * 1024 * 1024     # au-delà, le document n'est comparé que bit à bit
 MAX_TEXT_BYTES = 30 * 1024 * 1024  # fichiers texte / csv
 MAX_CHARS = 1_000_000              # texte conservé dans l'index par document
@@ -191,18 +192,39 @@ def _zread(z, name, limit=80 * 1024 * 1024):
     return z.read(name)
 
 
+def _custom_xml(z):
+    """Données liées aux contrôles de contenu (customXml/item*.xml).
+
+    Un modèle Word rempli par un logiciel (fiche d'intervention, bon, courrier type) garde un document.xml
+    strictement identique d'un fichier à l'autre : les vraies valeurs (client, numéro, date...) sont ici,
+    et Word les affiche à l'ouverture. Les ignorer ferait passer des documents différents pour des copies."""
+    out = []
+    for n in _zip_members(z, r"customXml/item\d+\.xml$"):
+        s = _zread(z, n).decode("utf-8", "replace")
+        vals = [html.unescape(v).strip() for v in re.findall(r">([^<>]+)<", s)]
+        vals = [v for v in vals if v]
+        if vals:
+            out.append("\n".join(vals))
+    return "\n".join(out)
+
+
 def _ooxml_word(path):
     with zipfile.ZipFile(lp(path)) as z:
-        parts = [n for n in ("word/document.xml", "word/footnotes.xml", "word/endnotes.xml") if n in z.namelist()]
-        if not parts:
+        names = set(z.namelist())
+        if "word/document.xml" not in names:
             raise Unsupported("document Word sans contenu lisible")
-        return "\n".join(xml_text(_zread(z, n)) for n in parts)
+        parts = (_zip_members(z, r"word/header\d*\.xml$") + ["word/document.xml"] +
+                 [n for n in ("word/footnotes.xml", "word/endnotes.xml", "word/comments.xml") if n in names] +
+                 _zip_members(z, r"word/footer\d*\.xml$"))
+        texts = [xml_text(_zread(z, n)) for n in parts]
+        texts.append(_custom_xml(z))
+        return "\n".join(t for t in texts if t.strip())
 
 
 def _ooxml_slides(path):
     with zipfile.ZipFile(lp(path)) as z:
         names = _zip_members(z, r"ppt/slides/slide\d+\.xml$") + _zip_members(z, r"ppt/notesSlides/notesSlide\d+\.xml$")
-        return "\n\n".join(xml_text(_zread(z, n)) for n in names)
+        return "\n\n".join([xml_text(_zread(z, n)) for n in names] + [_custom_xml(z)])
 
 
 _CELL = re.compile(r"<c\b([^>]*?)(?:/>|>(.*?)</c>)", re.S)
@@ -720,7 +742,8 @@ def links(db, ids, thr=0.8, progress=None):
 
 
 def groups(db, ids, thr=0.8, progress=None):
-    """Groupes de documents au contenu identique ou voisin : [(type, [(id, note), ...])], référence en tête.
+    """Groupes de documents au contenu identique ou voisin : [(type, [(id, note, repère), ...])], référence en
+    tête ; deux membres de même repère ont exactement le même contenu.
 
     Les versions successives d'un même document sont réunies de proche en proche (v1 ~ v2 ~ v3) ; la note
     affichée est toujours la ressemblance avec la référence du groupe."""
@@ -760,6 +783,11 @@ def groups(db, ids, thr=0.8, progress=None):
             same = info[m]["chash"] == info[ref]["chash"] or (info[m]["mid"] and info[m]["mid"] == info[ref]["mid"])
             scored.append((m, 100.0 if same else 100.0 * jaccard(rs, unpack_sketch(info[m]["sketch"]))))
         scored.sort(key=lambda t: -t[1])
+        # fichiers au contenu strictement identique à l'intérieur du groupe : même repère
+        cls = {}
+        for m in mem:
+            cls.setdefault(info[m]["mid"] or info[m]["chash"], []).append(m)
+        mark = {m: "c%d" % n for n, g in enumerate(cls.values()) if len(g) > 1 for m in g}
         mids = {info[m]["mid"] for m in mem}
         if len(mids) == 1 and None not in mids:
             kind = "mail"
@@ -767,7 +795,7 @@ def groups(db, ids, thr=0.8, progress=None):
             kind = "contenu"
         else:
             kind = "proche"
-        out.append((kind, [(ref, 100.0)] + scored))
+        out.append((kind, [(m, sc, mark.get(m)) for m, sc in [(ref, 100.0)] + scored]))
     return out
 
 
