@@ -151,3 +151,20 @@ def test_plantage_pendant_analyse_desactive_le_gpu(tmp_path):
 def test_clip_jamais_sur_gpu():
     from core.models import GPU_MODELS
     assert not any("clip" in m or "quantized" in m for m in GPU_MODELS)
+
+
+def test_carte_la_plus_puissante_par_defaut(state):
+    from core import models
+    ads = [{"id": 0, "name": "Intel UHD", "vram": 128 << 20, "software": False},
+           {"id": 1, "name": "NVIDIA RTX", "vram": 8 << 30, "software": False},
+           {"id": 2, "name": "Microsoft Basic Render Driver", "vram": 0, "software": True}]
+    assert models.best_adapter(ads) == 1 and models.best_adapter([]) == 0
+    models._ADAPTERS = ads
+    try:
+        assert state.mm.gpu_device() == 1                    # automatique : la dédiée, pas l'intégrée
+        state.db.set_setting("gpu_device", 0)
+        assert state.mm.gpu_device() == 0                    # choix manuel respecté
+        state.db.set_setting("gpu_device", 7)
+        assert state.mm.gpu_device() == 1                    # carte disparue : retour à l'automatique
+    finally:
+        models._ADAPTERS = None

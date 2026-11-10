@@ -830,6 +830,8 @@ async function loadSettings(){
     <div class="row" style="margin-top:8px"><label class="opt"><input type="checkbox" id="auto_m" ${CAPS.auto_models?"checked":""}><b>Télécharger automatiquement les modèles conseillés</b></label>
       <span class="muted">au lancement de l'application, en arrière-plan (hors InsightFace : licence à accepter).</span></div>
     <div class="row"><label class="opt"><input type="checkbox" id="use_gpu" ${CAPS.use_gpu?"checked":""}><b>Utiliser le GPU</b></label>
+      ${CAPS.gpu_devices.length?`<label class="opt">Carte <select id="gpu_dev"><option value="auto">Automatique : la plus puissante</option>${CAPS.gpu_devices.filter(a=>!a.software).map(a=>`<option value="${a.id}">GPU ${a.id} — ${esc(a.name)} (${(a.vram/1073741824).toFixed(1)} Go dédiés)</option>`).join("")}</select></label>
+      <span class="muted">utilisée : <b>${esc((CAPS.gpu_devices.find(a=>a.id===CAPS.gpu_device_used)||{}).name||"?")}</b></span>`:""}
       <button id="gpu_retry">Réessayer le GPU</button><span class="muted">${esc(CAPS.gpu_note||"")}</span>
       <span class="muted">Chaque modèle est d'abord essayé sur le GPU dans un processus séparé : si le pilote plante, l'application bascule seule sur le processeur au lieu de se fermer.</span></div>
     <p class="muted">${CAPS.gpu?"🚀 GPU actif : "+esc(CAPS.gpu):CAPS.gpu_available?"GPU disponible ("+esc(CAPS.gpu_available)+") mais désactivé ci-dessus.":"⚠ Calcul sur le processeur uniquement. Pour activer le GPU : fermez l'application, puis <code>.venv\\Scripts\\pip install --force-reinstall onnxruntime-directml</code> (Windows, toute carte DirectX 12) ou <code>onnxruntime-gpu</code> (NVIDIA + CUDA 12). <code>lancer.bat</code> le fait tout seul au premier lancement ; supprimez <code>.venv\\gpu.txt</code> pour refaire la détection."}</p>
@@ -843,6 +845,8 @@ async function loadSettings(){
       <button id="s_save" class="pri">Enregistrer</button></div>
     <p class="muted">Les données de visages restent sur ce PC (base locale) et ne sont jamais envoyées sur le réseau. Bouton d'effacement dans l'onglet Personnes.</p></div>`;
   $("#use_gpu").onchange=async e=>{await api("/api/settings",{use_gpu:e.target.checked});toast(e.target.checked?"GPU activé":"GPU désactivé : calcul sur le processeur");loadSettings()};
+  if($("#gpu_dev")){$("#gpu_dev").value=String(CAPS.gpu_device);
+    $("#gpu_dev").onchange=async e=>{await api("/api/settings",{gpu_device:e.target.value});toast("Carte graphique enregistrée : prise en compte à la prochaine analyse");loadSettings()}}
   $("#gpu_retry").onclick=async()=>{await api("/api/settings",{use_gpu:true,retry_gpu:true});toast("Le GPU sera réessayé à la prochaine analyse");loadSettings()};
   $("#auto_m").onchange=async e=>{await api("/api/models/auto",{enabled:e.target.checked});
     toast(e.target.checked?"Téléchargement automatique activé":"Téléchargement automatique désactivé");autoLance=false;loadSettings()};

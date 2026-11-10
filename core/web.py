@@ -18,7 +18,7 @@ from . import __version__, actions, calib, dupes, persons, search, similar
 from .config import DATA_DIR, IMG_EXT, RIGOR_LABELS, WEB_EXT
 from .db import Database
 from .imaging import HEIF, RAW, cv2, load_small
-from .models import LICENSE_INSIGHTFACE, ModelManager, providers
+from .models import LICENSE_INSIGHTFACE, ModelManager, gpu_adapters, providers
 from .scanner import Scanner
 from .util import Scope, kind_of, lp, norm
 
@@ -122,6 +122,8 @@ def create_app(state=None):
             "providers": providers(), "fts": S.db.fts,
             "gpu": (S.mm.gpu_providers() or [""])[0], "gpu_available": next((p for p in providers() if p != "CPUExecutionProvider"), ""),
             "use_gpu": S.mm.use_gpu(), "gpu_note": S.mm.gpu_note,
+            "gpu_devices": gpu_adapters(), "gpu_device": S.db.get_setting("gpu_device", "auto"),
+            "gpu_device_used": S.mm.gpu_device(),
             "auto_models": S.auto_models(),
         }
 
@@ -145,6 +147,9 @@ def create_app(state=None):
         for k in ("person_thr_insightface", "person_thr_opencv", "eye_closed_ratio", "blur_min"):
             if k in d:
                 S.db.set_setting(k, float(d[k]))
+        if "gpu_device" in d:
+            S.db.set_setting("gpu_device", "auto" if d["gpu_device"] == "auto" else int(d["gpu_device"]))
+            d.setdefault("use_gpu", S.mm.use_gpu())
         if "use_gpu" in d:
             S.db.set_setting("use_gpu", "1" if d["use_gpu"] else "0")
             if d.get("retry_gpu"):               # oublier les essais en échec (nouveau pilote, autre carte)

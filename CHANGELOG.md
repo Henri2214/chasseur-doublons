@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.0 - 2026-11-10
+### Ajouté
+- **Choix de la carte graphique** : sur un PC à plusieurs GPU, la carte la plus puissante (la plus grande
+  mémoire vidéo dédiée) est utilisée par défaut, et non plus la carte n° 0 de Windows, souvent la puce
+  intégrée au processeur. Réglages liste les cartes avec leur mémoire, indique celle qui est utilisée et
+  permet d'en imposer une. La liste est lue via DXGI dans un processus séparé.
+
 ## 2.3.2 - 2026-11-10
 ### Corrigé
 - **Plantage pendant l'analyse avec IA CLIP sur GPU** (« Serveur injoignable ») : `data/plantage.log`

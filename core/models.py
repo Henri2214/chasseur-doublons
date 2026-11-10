@@ -92,8 +92,10 @@ _GPU_LOCK = threading.Lock()     # une seule exécution GPU à la fois, toutes s
 _PROBE = r"""
 import sys, json, numpy as np, onnxruntime as ort
 path, provs = sys.argv[1], json.loads(sys.argv[2])
+provs = [tuple(p) if isinstance(p, list) else p for p in provs]
+names = [p[0] if isinstance(p, tuple) else p for p in provs]
 so = ort.SessionOptions(); so.log_severity_level = 3
-if "DmlExecutionProvider" in provs:
+if "DmlExecutionProvider" in names:
     so.enable_mem_pattern = False
     so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
 s = ort.InferenceSession(path, sess_options=so, providers=provs)
@@ -110,6 +112,64 @@ for i in s.get_inputs():
 for _ in range(2):
     s.run(None, feed)
 """
+
+# Liste des cartes graphiques dans l'ordre DXGI (c'est l'indice attendu par DirectML : device_id).
+# Exécuté dans un processus séparé : un appel COM raté ne doit jamais faire tomber l'application.
+_ENUM = r"""
+import ctypes, json, sys
+from ctypes import wintypes
+class GUID(ctypes.Structure):
+    _fields_ = [("a", ctypes.c_ulong), ("b", ctypes.c_ushort), ("c", ctypes.c_ushort), ("d", ctypes.c_ubyte * 8)]
+class DESC1(ctypes.Structure):
+    _fields_ = [("Description", ctypes.c_wchar * 128), ("VendorId", ctypes.c_uint), ("DeviceId", ctypes.c_uint),
+                ("SubSysId", ctypes.c_uint), ("Revision", ctypes.c_uint), ("DedicatedVideoMemory", ctypes.c_size_t),
+                ("DedicatedSystemMemory", ctypes.c_size_t), ("SharedSystemMemory", ctypes.c_size_t),
+                ("LuidLow", ctypes.c_ulong), ("LuidHigh", ctypes.c_long), ("Flags", ctypes.c_uint)]
+iid = GUID(0x770aae78, 0xf26f, 0x4dba, (ctypes.c_ubyte * 8)(0xa8, 0x29, 0x25, 0x3c, 0x83, 0xd1, 0xb3, 0x87))
+dxgi = ctypes.WinDLL("dxgi")
+fac = ctypes.c_void_p()
+if dxgi.CreateDXGIFactory1(ctypes.byref(iid), ctypes.byref(fac)) != 0:
+    sys.exit(2)
+def method(obj, index, *argtypes):
+    vt = ctypes.cast(ctypes.cast(obj, ctypes.POINTER(ctypes.c_void_p))[0], ctypes.POINTER(ctypes.c_void_p))
+    return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *argtypes)(vt[index])
+out, i = [], 0
+while i < 16:
+    ad = ctypes.c_void_p()
+    if method(fac, 12, ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p))(fac, i, ctypes.byref(ad)) != 0:
+        break
+    d = DESC1()
+    if method(ad, 10, ctypes.POINTER(DESC1))(ad, ctypes.byref(d)) == 0:
+        out.append({"id": i, "name": d.Description, "vram": int(d.DedicatedVideoMemory),
+                    "software": bool(d.Flags & 2) or d.VendorId == 0x1414})
+    method(ad, 2)(ad)
+    i += 1
+method(fac, 2)(fac)
+print(json.dumps(out))
+"""
+_ADAPTERS = None
+
+
+def gpu_adapters():
+    """Cartes graphiques vues par Windows [{id, name, vram, software}] ; liste vide ailleurs ou en cas d'échec."""
+    global _ADAPTERS
+    if _ADAPTERS is None:
+        _ADAPTERS = []
+        if os.name == "nt":
+            try:
+                r = subprocess.run([sys.executable, "-c", _ENUM], capture_output=True, timeout=30)
+                if r.returncode == 0:
+                    _ADAPTERS = json.loads(r.stdout.decode("utf-8", "ignore").strip() or "[]")
+            except Exception:
+                _ADAPTERS = []
+    return _ADAPTERS
+
+
+def best_adapter(adapters):
+    """La carte la plus puissante : la plus grande mémoire vidéo dédiée, hors rendu logiciel.
+    (Une puce intégrée au processeur n'a presque pas de mémoire dédiée ; une carte NVIDIA/AMD en a des Go.)"""
+    real = [a for a in adapters if not a.get("software")]
+    return max(real, key=lambda a: a.get("vram", 0))["id"] if real else 0
 
 
 class LockedSession:
@@ -148,15 +208,30 @@ class ModelManager:
     def gpu_providers(self):
         return [p for p in providers() if p in GPU_PROVIDERS] if self.use_gpu() else []
 
+    def gpu_device(self):
+        """Indice de la carte utilisée par DirectML : choix de l'utilisateur, sinon la plus puissante."""
+        ads = gpu_adapters()
+        v = self.db.get_setting("gpu_device", "auto") if self.db else "auto"
+        if v != "auto" and any(a["id"] == int(v) for a in ads):
+            return int(v)
+        return best_adapter(ads)
+
+    def gpu_spec(self):
+        """Fournisseurs GPU avec leurs options (DirectML : carte choisie)."""
+        out = []
+        for p in self.gpu_providers():
+            out.append((p, {"device_id": self.gpu_device()}) if p == "DmlExecutionProvider" else p)
+        return out
+
     def _gpu_safe(self, path, provs):
         """Vrai si le modèle tourne sur le GPU dans un processus d'essai (résultat mémorisé)."""
         key = "gpu_probe:%s:%s:%s:%s" % (os.path.basename(path), os.path.getsize(path),
-                                         getattr(ort, "__version__", "?"), provs[0])
+                                         getattr(ort, "__version__", "?"), json.dumps(provs[0]))
         if self.db:
             v = self.db.get_setting(key)
             if v is not None:
                 if not v:
-                    self.gpu_note = "GPU écarté après un essai en échec (%s) : calcul sur le processeur." % provs[0]
+                    self.gpu_note = "GPU écarté après un essai en échec (%s) : calcul sur le processeur." % (provs[0],)
                 return bool(v)
         try:
             r = subprocess.run([sys.executable, "-c", _PROBE, path, json.dumps(provs)], capture_output=True,
@@ -165,7 +240,7 @@ class ModelManager:
         except Exception:
             ok = False
         if not ok:
-            self.gpu_note = "GPU écarté après un essai en échec (%s) : calcul sur le processeur." % provs[0]
+            self.gpu_note = "GPU écarté après un essai en échec (%s) : calcul sur le processeur." % (provs[0],)
         if self.db:
             self.db.set_setting(key, bool(ok))
         return ok
@@ -325,12 +400,13 @@ class ModelManager:
             so.log_severity_level = 3
             s = None
             gpu = self.gpu_providers() if os.path.basename(rel) in GPU_MODELS else []
-            if gpu and self._gpu_safe(self.path(rel), gpu + ["CPUExecutionProvider"]):
+            spec = self.gpu_spec() if gpu else []
+            if gpu and self._gpu_safe(self.path(rel), spec + ["CPUExecutionProvider"]):
                 try:
                     if "DmlExecutionProvider" in gpu:      # exigences de DirectML
                         so.enable_mem_pattern = False
                         so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-                    g = ort.InferenceSession(self.path(rel), sess_options=so, providers=gpu + ["CPUExecutionProvider"])
+                    g = ort.InferenceSession(self.path(rel), sess_options=so, providers=spec + ["CPUExecutionProvider"])
                     if g.get_providers()[0] in GPU_PROVIDERS:
                         s = LockedSession(g)
                     else:
