@@ -31,6 +31,7 @@ label.opt.dis b{text-decoration:underline dotted}
 button.dl{padding:0 6px;font-size:11px;border-color:var(--acc);color:var(--acc)}
 #mwarn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#3a2f12;border:1px solid #6b5520;font-size:13px}
 tr.hl td{background:#243454;transition:background .4s}
+.card{user-select:none}
 .chip{display:inline-flex;align-items:center;gap:4px;margin:3px 4px 0 0;padding:2px 9px;border-radius:999px;background:#2a3245;border:1px solid #3a4360;cursor:pointer;font-size:12px}
 .chip:hover{background:var(--acc);color:#fff}
 .mods{display:flex;flex-wrap:wrap;gap:4px 14px;padding:6px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
@@ -166,6 +167,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option></select>
     <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures">
     <label class="opt">par page <select id="perg"><option value="10">10 groupes</option><option value="20" selected>20</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select></label>
+    <span class="muted" title="Cochez une photo, puis maintenez Maj et cliquez sur une autre : toutes celles entre les deux sont cochées.">⇧ Maj + clic : plage</span>
     <button id="selall" title="Coche TOUTES les photos de tous les groupes affichés (toutes les pages), y compris la référence">Tout sélectionner</button><button id="selnone">Tout désélectionner</button>
     <select id="f_auto"><option value="">Sélection auto…</option><option value="best">Garder la meilleure (netteté, résolution, yeux ouverts)</option><option value="oldest">Garder le plus ancien</option><option value="newest">Garder le plus récent</option><option value="biggest">Garder le plus lourd</option><option value="res">Garder la meilleure résolution</option><option value="shortpath">Garder le chemin le plus court</option><option value="none">Tout désélectionner</option></select>
     <button id="mv" disabled>Déplacer…</button><button id="rm" class="bad" disabled>Supprimer</button>
@@ -517,6 +519,26 @@ $("#res").addEventListener("click",async e=>{
   else if(act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}
   else if(act==="ren")doRename(f);
 });
+// Sélection multiple : un clic sur une case, puis Maj + clic sur une autre photo (case ou image) :
+// toutes les photos entre les deux prennent l'état de la première (cochées ou décochées).
+const ancre={};
+function plage(cont,set){
+  $(cont).addEventListener("click",e=>{
+    const card=e.target.closest(".card"),el=e.target.closest("[data-act]");
+    if(!card||!el||(el.dataset.act!=="sel"&&el.dataset.act!=="view"))return;
+    const a=ancre[cont];
+    if(e.shiftKey&&a&&document.contains(a.card)&&a.card!==card){
+      e.stopPropagation();e.preventDefault();
+      const cards=[...document.querySelectorAll(cont+" .card")];
+      let i=cards.indexOf(a.card),j=cards.indexOf(card);if(i>j)[i,j]=[j,i];
+      for(const c of cards.slice(i,j+1)){const id=+c.dataset.id;a.on?set.add(id):set.delete(id);c.classList.toggle("sel",a.on);const k=c.querySelector(".chk input");if(k)k.checked=a.on}
+      ancre[cont]={card,on:a.on};updBar();
+      toast(`${j-i+1} photo(s) ${a.on?"sélectionnée(s)":"désélectionnée(s)"}`);
+      return;
+    }
+    if(el.dataset.act==="sel")ancre[cont]={card,on:!set.has(+card.dataset.id)};
+  },true);
+}
 function toggleSel(set,id,card,el){const on=!set.has(id);on?set.add(id):set.delete(id);card.classList.toggle("sel",on);el.querySelector("input").checked=on;updBar()}
 async function doRename(f){
   const n=prompt("Nouveau nom :",f.name);if(!n||n===f.name)return;
@@ -887,6 +909,7 @@ $("#mcancel").onclick=()=>$("#modal").style.display="none";
 $("#mok").onclick=()=>{const p=$("#mpath").value.trim();$("#modal").style.display="none";if(p&&pickCb)pickCb(p)};
 $("#browse").onclick=()=>pickDir("Choisir le dossier à analyser",p=>$("#path").value=p);
 
+plage("#res",sel);plage("#xres",xsel);plage("#sim_res",ssel);plage("#ps_res",psel);
 loadCaps().then(poll).catch(e=>toast(e.message,1));setTop();
 </script>
 </body>

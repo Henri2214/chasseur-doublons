@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.1 - 2026-11-10
+### Ajouté
+- **Sélection par plage avec Maj** : cochez une photo, puis Maj + clic sur une autre (case ou image) ; toutes
+  les photos entre les deux prennent le même état (cochées ou décochées). Disponible dans Doublons,
+  Explorer, Similaires et Recherche de personne.
+
 ## 2.4.0 - 2026-11-10
 ### Ajouté
 - **Choix de la carte graphique** : sur un PC à plusieurs GPU, la carte la plus puissante (la plus grande
