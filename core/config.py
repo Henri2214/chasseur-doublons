@@ -6,9 +6,26 @@ dans des dossiers ignorés par git. Variables d'environnement :
   CD_MODELS_DIR : dossier des modèles ONNX
 """
 import os
+import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent
+# Application « gelée » (exécutable PyInstaller) : les ressources (page web) sont dans le paquet, tandis que
+# les données et les modèles vivent à côté de l'exécutable — ou dans le profil de l'utilisateur si ce
+# dossier n'est pas accessible en écriture (Program Files, par exemple).
+FROZEN = bool(getattr(sys, "frozen", False))
+if FROZEN:
+    RES_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    BASE = Path(sys.executable).resolve().parent
+    try:
+        _t = BASE / ".ecriture"
+        _t.write_text("ok")
+        _t.unlink()
+    except OSError:
+        BASE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "ChasseurDoublons"
+        BASE.mkdir(parents=True, exist_ok=True)
+else:
+    BASE = Path(__file__).resolve().parent.parent
+    RES_DIR = BASE
 DATA_DIR = Path(os.environ.get("CD_DATA_DIR") or (BASE / "data"))
 MODELS_DIR = Path(os.environ.get("CD_MODELS_DIR") or (BASE / "models"))
 DB_NAME = "index.sqlite3"

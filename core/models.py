@@ -148,6 +148,26 @@ method(fac, 2)(fac)
 print(json.dumps(out))
 """
 _ADAPTERS = None
+INTERNAL = {}       # nom -> code des tâches lancées dans un processus séparé (rempli plus bas)
+
+
+def child_cmd(name, *args):
+    """Commande lançant une tâche interne dans un processus séparé.
+    En exécutable PyInstaller, « python -c » n'existe pas : l'exécutable se relance lui-même avec --interne."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--interne", name, *args]
+    return [sys.executable, "-c", INTERNAL[name], *args]
+
+
+def run_internal(name, args):
+    """Appelé par app.py dans le processus enfant de l'exécutable."""
+    sys.argv = ["-c", *args]
+    exec(compile(INTERNAL[name], "<%s>" % name, "exec"), {"__name__": "__main__"})
+
+
+INTERNAL.update(enum=_ENUM, probe=_PROBE)
+# pas de fenêtre de console qui clignote pour les processus d'essai (Windows)
+_NOWIN = {"creationflags": 0x08000000} if os.name == "nt" else {}
 
 
 def gpu_adapters():
@@ -157,7 +177,7 @@ def gpu_adapters():
         _ADAPTERS = []
         if os.name == "nt":
             try:
-                r = subprocess.run([sys.executable, "-c", _ENUM], capture_output=True, timeout=30)
+                r = subprocess.run(child_cmd("enum"), capture_output=True, timeout=30, **_NOWIN)
                 if r.returncode == 0:
                     _ADAPTERS = json.loads(r.stdout.decode("utf-8", "ignore").strip() or "[]")
             except Exception:
@@ -234,7 +254,7 @@ class ModelManager:
                     self.gpu_note = "GPU écarté après un essai en échec (%s) : calcul sur le processeur." % (provs[0],)
                 return bool(v)
         try:
-            r = subprocess.run([sys.executable, "-c", _PROBE, path, json.dumps(provs)], capture_output=True,
+            r = subprocess.run(child_cmd("probe", path, json.dumps(provs)), capture_output=True, **_NOWIN,
                                timeout=180)
             ok = r.returncode == 0
         except Exception:

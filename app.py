@@ -18,6 +18,10 @@ from core.web import State, create_app  # noqa: E402
 
 
 def main(argv=None):
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) >= 2 and args[0] == "--interne":      # tâche d'essai GPU relancée par l'exécutable lui-même
+        from core.models import run_internal
+        return run_internal(args[1], args[2:])
     ap = argparse.ArgumentParser(description="Chasseur de doublons %s (page web locale)" % __version__)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
@@ -58,4 +62,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()

@@ -9,6 +9,21 @@ Dépôt : une seule version, à la racine. La procédure suivie pour chaque gros
 `.bak`, branche, tests, purge) est décrite dans [MAINTENANCE.md](MAINTENANCE.md). La v1.1 est archivée
 (étiquette Git `v1.1-finale`).
 
+## Application autonome (sans installer Python)
+
+Téléchargez `ChasseurDoublons-v…-win64.zip` dans les **Releases** du dépôt GitHub, décompressez, puis
+double-cliquez sur `ChasseurDoublons.exe`. Pour la construire vous-même :
+
+```powershell
+.\tools\construire.ps1                      # utilise les modèles déjà présents dans models\
+.\tools\construire.ps1 -TelechargerModeles  # les télécharge d'abord
+```
+
+Le résultat est dans `dist\`. Sur GitHub, pousser une étiquette (`git tag v2.6.0 ; git push origin v2.6.0`)
+lance la construction et publie l'archive dans les Releases. L'exécutable n'a été essayé ici que dans sa
+variante Linux (mêmes recette et code) ; la variante Windows est vérifiée par l'essai de démarrage du
+workflow GitHub.
+
 ## Installation et lancement
 
 Prérequis : Python 3.10 ou plus récent ([python.org](https://www.python.org/downloads/), cocher « Add to PATH »).

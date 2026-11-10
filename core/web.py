@@ -85,7 +85,8 @@ def create_app(state=None):
     app = Flask(__name__, static_folder=None)
     app.config["STATE"] = S
     app.config["MAX_CONTENT_LENGTH"] = 120 * 1024 * 1024
-    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+    from .config import RES_DIR
+    static_dir = os.path.join(str(RES_DIR), "static")
 
     allowed_hosts = {"127.0.0.1", "localhost", "[::1]"}
 

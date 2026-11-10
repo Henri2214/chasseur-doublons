@@ -18,3 +18,8 @@ data/
 *.db
 .cache_miniatures/
 miniatures/
+
+# Construction de l'exécutable (tools/construire.ps1)
+.venv-build/
+build/
+dist/

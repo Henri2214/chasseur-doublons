@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.6.0 - 2026-11-10
+### Ajouté
+- **Application autonome Windows** : `tools/construire.ps1` produit `dist\ChasseurDoublons\ChasseurDoublons.exe`
+  (PyInstaller, dossier autonome) et l'archive `ChasseurDoublons-v<version>-win64.zip`. Aucun Python requis
+  sur le PC de destination ; OCR, HEIC, RAW, GPU DirectML et modèles à licence libre inclus (InsightFace
+  jamais inclus : licence non commerciale, téléchargement par l'utilisateur).
+- Recette `packaging/chasseur.spec` ; construction automatique sur GitHub (`.github/workflows/construire.yml`)
+  à chaque étiquette `v*`, avec publication de l'archive dans les Releases.
+- En mode exécutable : données et modèles à côté de l'exe (ou dans `%LOCALAPPDATA%\ChasseurDoublons` si le
+  dossier est protégé) ; les essais GPU relancent l'exécutable lui-même (`--interne`).
+
 ## 2.5.0 - 2026-11-10
 ### Ajouté
 - **Recherche à partir d'une zone d'une photo** : dans l'aperçu plein écran, bouton « Chercher une zone » ;
