@@ -14,7 +14,7 @@ import time
 from flask import Flask, Response, abort, jsonify, request, send_file
 from PIL import Image, ImageOps
 
-from . import __version__, actions, calib, dupes, persons, search
+from . import __version__, actions, calib, dupes, persons, search, similar
 from .config import DATA_DIR, IMG_EXT, RIGOR_LABELS, WEB_EXT
 from .db import Database
 from .imaging import HEIF, RAW, cv2, load_small
@@ -546,6 +546,42 @@ def create_app(state=None):
     @app.get("/api/facets")
     def api_facets():
         return jsonify(search.facets(S.db))
+
+    # ------------------------------------------------------------ photos similaires (clic sur une photo)
+    def run_similar(a):
+        fid = int(a.get("id", 0))
+        thr = float(a.get("thr") or 0.55)
+        src = [x for x in (a.get("sources") or "").split(",") if x] or None
+        res = similar.similar(S.db, fid, thr, src)
+        ok = set(in_scope_ids([r[0] for r in res]))
+        return fid, [r for r in res if r[0] in ok]
+
+    @app.get("/api/similar")
+    def api_similar():
+        a = request.args
+        try:
+            fid, res = run_similar(a)
+        except ValueError as e:
+            return err(str(e))
+        page, per = max(1, int(a.get("page", 1))), min(200, int(a.get("per", 60)))
+        sl = res[(page - 1) * per: page * per]
+        h = search._hydrate(S.db, [r[0] for r in sl], len(res), page, per, {}, [])
+        by = {r[0]: r for r in sl}
+        for f in h["files"]:
+            _, sim_, srcs = by[f["id"]]
+            f.update(sim=sim_, why=[similar.LABELS.get(x, x) for x in srcs])
+        ref = S.db.one("SELECT id, path, name FROM files WHERE id=?", (fid,))
+        h.update(ref={"id": fid, "name": ref["name"] if ref else "", "path": ref["path"] if ref else ""},
+                 sources=sorted({x for r in res for x in r[2]}))
+        return jsonify(h)
+
+    @app.get("/api/similar_ids")
+    def api_similar_ids():
+        try:
+            fid, res = run_similar(request.args)
+        except ValueError as e:
+            return err(str(e))
+        return jsonify(ids=[r[0] for r in res], total=len(res))
 
     # ------------------------------------------------------------ recherche d'une personne (visage de référence)
     def resolve_ref(d):
