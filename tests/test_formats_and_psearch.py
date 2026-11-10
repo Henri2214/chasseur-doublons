@@ -188,3 +188,45 @@ def test_hors_perimetre_exclu(client, state, indexed):
     state.scope.reset([os.path.join(os.path.dirname(state.data_dir), "ailleurs")])
     fid = state.db.one("SELECT id FROM faces WHERE file_id=?", (files[0],))["id"]
     assert post(client, state, "/api/psearch/run", {"face": fid, "thr": 0.0}).get_json()["total"] == 0
+
+
+# ------------------------------------------------------------------ v2.3 : pagination, modèles, étalonnage
+def test_pagination_jusqu_a_1000(client, state, photos):
+    post(client, state, "/api/scan", {"path": str(photos), "options": {"faces": False}})
+    assert wait_scan(client)["status"] == "done"
+    r = client.get("/api/search?per=500").get_json()
+    assert r["per"] == 500 and r["total"] == 4
+    assert client.get("/api/search?per=99999").get_json()["per"] == 1000
+    post(client, state, "/api/dupes", {"options": {"rigor": "normal"}})
+    assert client.get("/api/groups?per=200").get_json()["per"] == 200
+
+
+def test_reglage_telechargement_auto(client, state):
+    assert client.get("/api/caps").get_json()["caps"]["auto_models"] is True
+    assert post(client, state, "/api/models/auto", {"enabled": False}).get_json()["auto_models"] is False
+    assert client.get("/api/caps").get_json()["caps"]["auto_models"] is False
+    r = post(client, state, "/api/models/auto", {"enabled": True}).get_json()
+    assert r["auto_models"] is True and isinstance(r["started"], list)
+
+
+def test_etalonnage_reste_dans_le_perimetre(client, state, photos, tmp_path):
+    """Les photos d'une analyse précédente (autre dossier) ne doivent plus être proposées : vignettes 404."""
+    autre = tmp_path / "ailleurs"
+    autre.mkdir()
+    from conftest import photo_like, save_jpeg
+    im = photo_like(21)
+    save_jpeg(im, autre / "a.jpg", 95)
+    save_jpeg(im, autre / "b.jpg", 94)
+    post(client, state, "/api/scan", {"path": str(autre), "options": {"faces": False}})
+    assert wait_scan(client)["status"] == "done"
+    post(client, state, "/api/scan", {"path": str(photos), "options": {"faces": False}})
+    assert wait_scan(client)["status"] == "done"
+    dehors = {r["id"] for r in state.db.q("SELECT id FROM files WHERE path LIKE ?", (str(autre) + "%",))}
+    for _ in range(6):
+        p = client.get("/api/calib/next?kind=dup").get_json()["pair"]
+        if not p:
+            break
+        assert p["a"] not in dehors and p["b"] not in dehors
+        assert client.get("/api/thumb?id=%d" % p["a"]).mimetype == "image/jpeg"
+        post(client, state, "/api/calib/answer",
+             {"kind": "dup", "a": p["a"], "b": p["b"], "metrics": p["metrics"], "yes": True})

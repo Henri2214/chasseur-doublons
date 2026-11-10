@@ -26,7 +26,13 @@ nav button.on{background:var(--panel2);border-color:var(--line);color:#fff}
 .row .grow{flex:1;min-width:240px}
 label.opt{display:flex;gap:6px;align-items:center;color:var(--mut)}
 label.opt b{color:var(--tx);font-weight:500}
-label.opt.dis{opacity:.45}
+label.opt.dis{opacity:.55;cursor:pointer}
+label.opt.dis b{text-decoration:underline dotted}
+button.dl{padding:0 6px;font-size:11px;border-color:var(--acc);color:var(--acc)}
+#mwarn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#3a2f12;border:1px solid #6b5520;font-size:13px}
+tr.hl td{background:#243454;transition:background .4s}
+.chip{display:inline-flex;align-items:center;gap:4px;margin:3px 4px 0 0;padding:2px 9px;border-radius:999px;background:#2a3245;border:1px solid #3a4360;cursor:pointer;font-size:12px}
+.chip:hover{background:var(--acc);color:#fff}
 .mods{display:flex;flex-wrap:wrap;gap:4px 14px;padding:6px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
 .prog{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:6px}
 .prog>div{height:100%;background:var(--acc);width:0;transition:width .3s}
@@ -134,6 +140,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
       <label class="opt">vidéos <select id="vprec"><option value="6">6 images</option><option value="12" selected>12 images</option><option value="24">24 images</option></select></label>
       <label class="opt">visages <select id="fdet"><option value="rapide">rapide</option><option value="equilibre" selected>équilibré</option><option value="precis">précis</option></select></label>
     </div>
+    <div id="mwarn"></div>
   </div>
   <div class="prog" id="progw" style="display:none"><div id="pb"></div></div>
   <div id="phase"></div>
@@ -157,6 +164,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <select id="f_kind"><option value="all">Tous</option><option value="exact">Identiques</option><option value="visuel">Similaires</option><option value="image">Images</option><option value="video">Vidéos</option><option value="other">Autres</option></select>
     <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option></select>
     <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures">
+    <label class="opt">par page <select id="perg"><option value="10">10 groupes</option><option value="20" selected>20</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select></label>
     <button id="selall" title="Coche TOUTES les photos de tous les groupes affichés (toutes les pages), y compris la référence">Tout sélectionner</button><button id="selnone">Tout désélectionner</button>
     <select id="f_auto"><option value="">Sélection auto…</option><option value="best">Garder la meilleure (netteté, résolution, yeux ouverts)</option><option value="oldest">Garder le plus ancien</option><option value="newest">Garder le plus récent</option><option value="biggest">Garder le plus lourd</option><option value="res">Garder la meilleure résolution</option><option value="shortpath">Garder le chemin le plus court</option><option value="none">Tout désélectionner</option></select>
     <button id="mv" disabled>Déplacer…</button><button id="rm" class="bad" disabled>Supprimer</button>
@@ -185,6 +193,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <input type="text" id="xfolder" placeholder="Dossier" style="width:200px">
     <label class="opt">du <input type="date" id="xfrom"></label><label class="opt">au <input type="date" id="xto"></label>
     <span style="flex:1"></span><span class="muted" id="xsrc"></span>
+    <label class="opt">par page <select class="perp"><option value="50">50 photos</option><option value="100">100</option><option value="200">200</option><option value="500">500</option><option value="1000">1000</option></select></label>
     <button id="xall" title="Coche TOUS les résultats de la recherche (toutes les pages)">Tout sélectionner</button><button id="xnone">Tout désélectionner</button>
     <button id="xmv" disabled>Déplacer…</button><button id="xrm" class="bad" disabled>Supprimer</button>
   </div>
@@ -207,7 +216,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     </div>
   </div>
   <div class="row" id="sim_bar" style="display:none">
-    <button id="sim_all">Tout sélectionner</button><button id="sim_none">Tout désélectionner</button>
+    <button id="sim_all">Tout sélectionner</button><button id="sim_none">Tout désélectionner</button><label class="opt">par page <select class="perp"><option value="50">50 photos</option><option value="100">100</option><option value="200">200</option><option value="500">500</option><option value="1000">1000</option></select></label>
     <span style="flex:1"></span>
     <button id="sim_mv" disabled>Déplacer…</button><button id="sim_rm" class="bad" disabled>Supprimer</button>
   </div>
@@ -233,7 +242,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     </div>
   </div>
   <div class="row" id="ps_bar" style="display:none">
-    <button id="ps_all">Tout sélectionner</button><button id="ps_none">Tout désélectionner</button>
+    <button id="ps_all">Tout sélectionner</button><button id="ps_none">Tout désélectionner</button><label class="opt">par page <select class="perp"><option value="50">50 photos</option><option value="100">100</option><option value="200">200</option><option value="500">500</option><option value="1000">1000</option></select></label>
     <select id="ps_to"><option value="">Affecter les visages trouvés à…</option></select>
     <span style="flex:1"></span>
     <button id="ps_mv" disabled>Déplacer…</button><button id="ps_rm" class="bad" disabled>Supprimer</button>
@@ -303,16 +312,68 @@ function showTab(t){curTab=t;document.querySelectorAll("#tabs button").forEach(x
 // ---------------------------------------------------------------- capacités
 async function loadCaps(){
   const r=await api("/api/caps");CAPS=r.caps;SET=r.settings;
-  const dis=(id,on,msg)=>{const l=$("#"+id);l.classList.toggle("dis",!on);l.title=on?"":msg;const i=l.querySelector("input,select");if(i){i.disabled=!on;if(!on&&i.type==="checkbox")i.checked=false}};
+  const MODELE={l_faces:()=>SET.face_engine==="insightface"?"insightface":"opencv_faces",l_objects:()=>"yolox_s",l_clip:()=>"clip",l_cd:()=>"clip"};
+  const manquants=[];
+  const dis=(id,on,msg,nom)=>{
+    const l=$("#"+id);l.classList.toggle("dis",!on);l.title=on?"":msg;
+    const i=l.querySelector("input,select");if(i){i.disabled=!on;if(!on&&i.type==="checkbox")i.checked=false}
+    let b=l.querySelector(".dl");
+    if(on){if(b)b.remove();return}
+    if(!b){b=document.createElement("button");b.className="dl";b.type="button";l.append(b)}
+    b.textContent=id==="l_ocr"?"⤓ à installer":"⤓ modèle";
+    const act=ev=>{ev.preventDefault();ev.stopPropagation();
+      if(id==="l_ocr")return toast("OCR : .venv\\Scripts\\pip install rapidocr-onnxruntime (Python 3.12 maximum), puis relancez l'application.",1);
+      openModels(MODELE[id]())};
+    b.onclick=act;l.onclick=act;
+    if(nom&&id!=="l_cd")manquants.push(nom);
+  };
   const faceOk=SET.face_engine==="insightface"?CAPS.faces_insightface:CAPS.faces_opencv;
-  dis("l_faces",faceOk,"Modèle de visages absent : téléchargez-le dans Réglages (moteur actuel : "+SET.face_engine+").");
-  dis("l_objects",CAPS.objects,"Modèle YOLOX absent : téléchargez-le dans Réglages.");
-  dis("l_clip",CAPS.clip,"Modèle CLIP absent (ou bibliothèque tokenizers manquante) : voir Réglages.");
-  dis("l_cd",CAPS.clip,"Nécessite CLIP (voir Réglages).");
-  dis("l_ocr",CAPS.ocr,"Installez rapidocr-onnxruntime (requirements-optional.txt).");
+  dis("l_faces",faceOk,"Modèle de visages absent : cliquez pour le télécharger (moteur actuel : "+SET.face_engine+").","Visages");
+  dis("l_objects",CAPS.objects,"Modèle YOLOX absent : cliquez pour le télécharger.","Objets");
+  dis("l_clip",CAPS.clip,"Modèle CLIP absent (ou bibliothèque tokenizers manquante) : cliquez pour le télécharger.","IA CLIP");
+  dis("l_cd",CAPS.clip,"Nécessite CLIP (cliquez pour le télécharger).");
+  dis("l_ocr",CAPS.ocr,"OCR non installé : rapidocr-onnxruntime (Python 3.12 maximum).","Texte (OCR)");
+  majBandeau(manquants,r.models);
   $("#rig_cal").disabled=!SET.has_etalonne;
   if(!CAPS.video)$("#o_videos").parentElement.title="opencv-python-headless manquant : pas de vidéos";
   return r;
+}
+
+const RECOMMANDES=["opencv_faces","yolox_s","clip"];
+let capsT=null,autoLance=false;
+function majBandeau(manquants,M){
+  const w=$("#mwarn");
+  const enCours=Object.entries(M).filter(([k,m])=>m.progress&&m.progress.status==="running");
+  if(enCours.length){
+    w.style.display="flex";
+    w.innerHTML=`<b>⤓ Téléchargement des modèles en cours…</b><span>${enCours.map(([k,m])=>esc(m.label)+" : "+(m.progress.total?Math.round(100*m.progress.done/m.progress.total):0)+" %").join(" · ")}</span>
+      <span class="muted">vous pouvez lancer une analyse pendant ce temps ; les options s'activeront toutes seules.</span><button id="go_set">Voir dans Réglages</button>`;
+    $("#go_set").onclick=()=>showTab("set");
+    clearTimeout(capsT);capsT=setTimeout(loadCaps,2000);
+    return;
+  }
+  if(!manquants.length){w.style.display="none";w.innerHTML="";return}
+  if(CAPS.auto_models&&!autoLance&&RECOMMANDES.some(k=>M[k]&&!M[k].available)){
+    autoLance=true;api("/api/models/auto",{}).then(r=>{if(r.started.length){toast("Téléchargement automatique des modèles : "+r.started.join(", "));clearTimeout(capsT);capsT=setTimeout(loadCaps,1500)}}).catch(()=>{});
+  }
+  const aDl=RECOMMANDES.filter(k=>M[k]&&!M[k].available);
+  const mo=Math.round(aDl.reduce((t,k)=>t+(M[k].size||0),0)/1048576);
+  w.style.display="flex";
+  w.innerHTML=`<b>⚠ ${manquants.join(", ")} : désactivé(s)</b><span>les modèles d'IA ne sont pas encore téléchargés — l'analyse fonctionne sans eux (doublons exacts et visuels), mais ces options resteront grisées.</span>
+    ${aDl.length?`<button id="dl_all" class="pri">⤓ Télécharger les modèles conseillés (~${mo} Mo)</button>`:""}
+    <button id="go_set">Ouvrir Réglages</button>`;
+  $("#go_set").onclick=()=>showTab("set");
+  if($("#dl_all"))$("#dl_all").onclick=async()=>{
+    if(!confirm(`Télécharger ${aDl.length} modèle(s) (~${mo} Mo) : visages OpenCV (licence libre), objets YOLOX, contenu CLIP ?\nLe téléchargement se poursuit en arrière-plan, la progression s'affiche dans Réglages.`))return;
+    showTab("set");
+    for(const k of aDl){try{await api("/api/models/download",{name:k})}catch(e){toast(k+" : "+e.message,1)}}
+    loadSettings();
+  };
+}
+async function openModels(key){
+  showTab("set");await loadSettings();
+  const tr=document.querySelector(`[data-mrow="${key}"]`);
+  if(tr){tr.classList.add("hl");tr.scrollIntoView({block:"center",behavior:"smooth"});setTimeout(()=>tr.classList.remove("hl"),4000)}
 }
 
 // ---------------------------------------------------------------- analyse
@@ -371,12 +432,16 @@ async function recompute(){
 ["rig","o_exif","o_clipd","clip_thr"].forEach(i=>$("#"+i).onchange=()=>{sel.clear();recompute()});
 
 // ---------------------------------------------------------------- doublons (pagination serveur)
-let page=1,PER=20,gdata=null;
+let page=1,PER=20,PHOTOS=50,gdata=null;
 async function loadGroups(){
   gdata=await api(`/api/groups?page=${page}&per=${PER}&sort=${$("#f_sort").value}&kind=${$("#f_kind").value}`);
   renderGroups();
 }
 ["f_kind","f_sort"].forEach(i=>$("#"+i).onchange=()=>{page=1;loadGroups()});
+$("#perg").onchange=e=>{PER=+e.target.value;page=1;if(gdata)loadGroups()};
+document.querySelectorAll(".perp").forEach(sel=>{sel.value=PHOTOS;sel.onchange=e=>{PHOTOS=+e.target.value;
+  document.querySelectorAll(".perp").forEach(o=>o.value=PHOTOS);
+  if(curTab==="exp")xsearch(1);else if(curTab==="sim"&&simRef)simRun(1);else if(curTab==="ps"&&psRef)psRun(1)}});
 $("#f_size").oninput=()=>document.documentElement.style.setProperty("--w",$("#f_size").value+"px");
 function cardHtml(f,g,selset){
   const dim=f.w&&f.h?` · ${f.w}×${f.h}`:"";let tags="";
@@ -460,16 +525,30 @@ function view(f){
   $("#lbc").innerHTML=f.kind==="video"?`<video src="${src}" controls autoplay></video>`:`<img src="${f.kind==="image"?src:"/api/thumb?id="+f.id+"&s=600"}">`;
   $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+' <button id="lbsim">Photos similaires</button>';
   $("#lbsim").onclick=ev=>{ev.stopPropagation();closeLb();openSimilar(f)};$("#lbdet").textContent="";$("#lb").style.display="flex";
-  api("/api/info?id="+f.id).then(r=>{const p=[];
-    if(r.faces.length)p.push("Visages : "+r.faces.map(x=>x.name||"inconnu").join(", "));
-    if(r.objects.length)p.push("Objets : "+[...new Set(r.objects.map(x=>x.label))].join(", "));
-    if(r.scenes.length)p.push("Scènes : "+r.scenes.map(x=>x.label).join(", "));
-    if(r.file.blur!=null)p.push("Netteté : "+Math.round(r.file.blur));
-    if(r.file.cam)p.push("Appareil : "+r.file.cam);
-    if(r.ocr)p.push("Texte : "+r.ocr.slice(0,400));
-    $("#lbdet").textContent=p.join("\n")}).catch(()=>{});
+  api("/api/info?id="+f.id).then(r=>{
+    const chip=(lab,k,v)=>`<span class="chip" data-k="${k}" data-v="${esc(v)}" title="Voir toutes les photos avec « ${esc(lab)} »">${esc(lab)}</span>`;
+    let h="";
+    const pers=r.faces.filter(x=>x.person_id);
+    if(pers.length)h+=`<div>Personnes : ${pers.map(x=>chip(x.name||"sans nom #"+x.person_id,"person",x.person_id)).join("")}</div>`;
+    else if(r.faces.length)h+=`<div class="muted">${r.faces.length} visage(s) détecté(s), pas encore regroupé(s)</div>`;
+    const objs=[...new Set(r.objects.map(x=>x.label))];
+    if(objs.length)h+=`<div>Objets : ${objs.map(l=>chip(l,"object",l)).join("")}</div>`;
+    if(r.scenes.length)h+=`<div>Scènes : ${r.scenes.map(x=>chip(x.label,"scene",x.label)).join("")}</div>`;
+    const info=[];
+    if(r.file.blur!=null)info.push("Netteté : "+Math.round(r.file.blur));
+    if(r.file.cam)info.push("Appareil : "+r.file.cam);
+    if(info.length)h+=`<div class="muted">${esc(info.join(" · "))}</div>`;
+    if(r.ocr)h+=`<div class="muted">Texte : ${esc(r.ocr.slice(0,400))}</div>`;
+    if(!objs.length&&!r.faces.length&&!r.scenes.length)h+='<div class="muted">Aucun visage ni objet reconnu ici : lancez une analyse avec les modules Visages et Objets cochés.</div>';
+    $("#lbdet").innerHTML=h}).catch(()=>{});
 }
 function closeLb(){$("#lb").style.display="none";$("#lbc").innerHTML=""}
+$("#lbdet").addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c)return;
+  e.stopPropagation();closeLb();showTab("exp");
+  $("#xq").value="";["xkind","xperson","xobject","xscene","xblur","xfolder","xfrom","xto"].forEach(i=>$("#"+i).value="");
+  const sel=$("#"+{person:"xperson",object:"xobject",scene:"xscene"}[c.dataset.k]);
+  if(![...sel.options].some(o=>o.value===c.dataset.v))sel.append(new Option(c.textContent,c.dataset.v));
+  sel.value=c.dataset.v;xsearch(1);toast("Toutes les photos avec « "+c.textContent+" »")});
 $("#lb").onclick=closeLb;
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeLb();$("#modal").style.display="none"}});
 
@@ -502,7 +581,7 @@ async function moveTo(dest,ids){
 async function undo(journal){
   try{const r=await api("/api/undo",{journal});toast(`${r.undone} action(s) annulée(s)`);r.errors.forEach(x=>toast(x.error,1));refreshAll();refreshTree()}catch(e){toast(e.message,1)}
 }
-function refreshAll(){if(gdata)loadGroups();if($("#xres").innerHTML)xsearch(xpage);if(psRef&&$("#ps_res").innerHTML)psRun(pspage);if(simRef&&$("#sim_res").innerHTML)simRun(simpage);if(curTab==="jou")loadJournal();updBar()}
+function refreshAll(){if(gdata)loadGroups();if($("#xres").innerHTML)xsearch(xpage);if(psRef&&$("#ps_res").innerHTML)psRun(pspage,true);if(simRef&&$("#sim_res").innerHTML)simRun(simpage);if(curTab==="jou")loadJournal();updBar()}
 
 // ---------------------------------------------------------------- bandeau de dossiers + glisser-déposer
 let scanRoot="",treeRoot="",tree={},ver=0,dragIds=[],hoverP=null,hoverT=0;
@@ -597,11 +676,11 @@ $("#xall").onclick=async()=>{try{const r=await api("/api/search_ids?"+xquery({})
   toast(`${r.ids.length} fichier(s) sélectionné(s) (toutes les pages)`+(r.truncated?" — limité à 100 000":""))}catch(e){toast(e.message,1)}};
 $("#xnone").onclick=()=>{xsel.clear();document.querySelectorAll("#xres .card.sel").forEach(c=>{c.classList.remove("sel");const i=c.querySelector("input");if(i)i.checked=false});updBar()};
 async function xsearch(p){
-  xpage=p||1;const q=xquery({page:xpage,per:60});
+  xpage=p||1;const q=xquery({page:xpage,per:PHOTOS});
   try{xdata=await api("/api/search?"+q);xdata.files.forEach(f=>byId[f.id]=f);
     $("#xsrc").textContent=xdata.sources.length?"sources : "+xdata.sources.join(", "):"";
     $("#xres").innerHTML=xdata.files.length?xdata.files.map(f=>cardHtml(f,null,xsel)).join(""):'<div class="empty" style="grid-column:1/-1">Aucun résultat (lancez d\'abord une analyse du dossier pour ouvrir la session).</div>';
-    $("#xpager").innerHTML=pager(xdata.total,xpage,60,"xp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}catch(e){toast(e.message,1)}
+    $("#xpager").innerHTML=pager(xdata.total,xpage,PHOTOS,"xp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}catch(e){toast(e.message,1)}
 }
 $("#xgo").onclick=()=>xsearch(1);$("#xq").onkeydown=e=>{if(e.key==="Enter")xsearch(1)};
 ["xkind","xperson","xobject","xscene","xblur","xfrom","xto"].forEach(i=>$("#"+i).onchange=()=>xsearch(1));
@@ -623,11 +702,11 @@ function openSimilar(f){
 const simQuery=extra=>new URLSearchParams({id:simRef,thr:$("#sim_thr").value,sources:simSources(),...extra});
 async function simRun(p){
   if(!simRef)return;simpage=p||1;
-  try{simdata=await api("/api/similar?"+simQuery({page:simpage,per:60}));simdata.files.forEach(f=>byId[f.id]=f);
+  try{simdata=await api("/api/similar?"+simQuery({page:simpage,per:PHOTOS}));simdata.files.forEach(f=>byId[f.id]=f);
     $("#sim_bar").style.display="flex";
     $("#sim_info").textContent=`${simdata.total} photo(s) similaire(s)`+(simdata.sources.length?" · sources : "+simdata.sources.join(", "):"");
     $("#sim_res").innerHTML=simdata.files.length?simdata.files.map(f=>cardHtml(f,null,ssel)).join(""):'<div class="empty" style="grid-column:1/-1">Aucune photo semblable au-dessus de ce seuil. Baissez la « ressemblance minimale ». Les sources « mêmes personnes », « mêmes objets » et « même contenu » n\'agissent que si le dossier a été analysé avec ces modules (modèles à télécharger dans Réglages).</div>';
-    $("#sim_pager").innerHTML=pager(simdata.total,simpage,60,"simp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}
+    $("#sim_pager").innerHTML=pager(simdata.total,simpage,PHOTOS,"simp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}
   catch(e){toast(e.message,1)}}
 let simT=null;
 $("#sim_thr").oninput=()=>{$("#sim_thr_v").textContent=(+$("#sim_thr").value).toFixed(2).replace(".",",");clearTimeout(simT);if(simRef)simT=setTimeout(()=>simRun(1),350)};
@@ -669,14 +748,14 @@ let psT=null;
 $("#ps_thr").oninput=()=>{$("#ps_thr_v").textContent=(+$("#ps_thr").value).toFixed(2).replace(".",",");clearTimeout(psT);if(psRef)psT=setTimeout(()=>psRun(1),350)};
 $("#ps_small").onchange=()=>{if(psRef)psRun(1)};
 const psBody=extra=>Object.assign({},psRef,{thr:+$("#ps_thr").value,include_small:$("#ps_small").checked},extra||{});
-async function psRun(p){
+async function psRun(p,silencieux){
   pspage=p||1;
-  try{psdata=await api("/api/psearch/run",psBody({page:pspage,per:60}));psdata.files.forEach(f=>byId[f.id]=f);
+  try{psdata=await api("/api/psearch/run",psBody({page:pspage,per:PHOTOS}));psdata.files.forEach(f=>byId[f.id]=f);
     $("#ps_bar").style.display="flex";
     $("#ps_info").textContent=`${psdata.total} photo(s) trouvée(s) — ${psdata.matched_faces} visage(s) au-dessus de ${(+psdata.threshold).toFixed(2)} · moteur ${psdata.engine}`;
     $("#ps_res").innerHTML=psdata.files.length?psdata.files.map(f=>cardHtml(f,null,psel)).join(""):'<div class="empty" style="grid-column:1/-1">Aucune photo ne dépasse ce seuil. Baissez la « ressemblance minimale » ou cochez « petits visages ». (Il faut avoir analysé le dossier avec le module Visages.)</div>';
-    $("#ps_pager").innerHTML=pager(psdata.total,pspage,60,"psp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}
-  catch(e){toast(e.message,1)}}
+    $("#ps_pager").innerHTML=pager(psdata.total,pspage,PHOTOS,"psp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}
+  catch(e){if(silencieux){psRef=null;$("#ps_bar").style.display="none";$("#ps_res").innerHTML='<div class="empty" style="grid-column:1/-1">Relancez la recherche : la référence n\'est plus valable (photos supprimées ou déplacées).</div>'}else toast(e.message,1)}}
 $("#ps_res").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const card=el.closest(".card"),f=byId[card.dataset.id];
   if(el.dataset.act==="sel")toggleSel(psel,f.id,card,el);else if(el.dataset.act==="sim")openSimilar(f);else if(el.dataset.act==="view")view(f);
   else if(el.dataset.act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}else if(el.dataset.act==="ren")doRename(f)});
@@ -738,12 +817,17 @@ let mpoll=null;
 async function loadSettings(){
   const r=await loadCaps();const M=r.models;
   const row=(k,m)=>{const p=m.progress;const pr=p&&p.status==="running"?` ${p.total?Math.round(100*p.done/p.total):0} %`:p&&p.status==="error"?` <span style="color:var(--bad)">erreur : ${esc(p.error)}</span>`:"";
-    return `<tr><td><b>${esc(m.label)}</b><br><span class="muted">${esc(m.license)}</span></td><td>${m.size?fmtSize(m.size):"?"}</td><td>${m.available?"✔ installé":"absent"}${pr}</td>
+    return `<tr data-mrow="${k}"><td><b>${esc(m.label)}</b><br><span class="muted">${esc(m.license)}</span></td><td>${m.size?fmtSize(m.size):"?"}</td><td>${m.available?"✔ installé":"absent"}${pr}</td>
       <td>${m.available?`<button data-mdel="${k}">Supprimer</button>`:`<button data-mdl="${k}" ${p&&p.status==="running"?"disabled":""}>Télécharger</button>`}</td></tr>`};
   $("#settings").innerHTML=`
   <div class="panel"><h3>Modèles (téléchargés à la demande dans le dossier <code>models/</code>, jamais dans le dépôt)</h3>
     <div class="lic">⚠ ${esc(r.license_insightface)}<br><label class="opt" style="margin-top:6px"><input type="checkbox" id="lic_if" ${M.insightface.license_ok?"checked disabled":""}><b>J'ai lu et j'accepte : usage personnel de recherche, non commercial.</b></label></div>
     <table style="margin-top:10px"><tr><th>Modèle</th><th>Taille</th><th>État</th><th></th></tr>${Object.entries(M).map(([k,m])=>row(k,m)).join("")}</table>
+    <div class="row" style="margin-top:8px"><button id="dl_reco" class="pri">⤓ Télécharger les modèles conseillés</button>
+      <span class="muted">visages OpenCV (licence libre) + objets YOLOX-S + contenu CLIP. InsightFace reste à part : licence recherche non commerciale.</span></div>
+    <div class="row" style="margin-top:8px"><label class="opt"><input type="checkbox" id="auto_m" ${CAPS.auto_models?"checked":""}><b>Télécharger automatiquement les modèles conseillés</b></label>
+      <span class="muted">au lancement de l'application, en arrière-plan (hors InsightFace : licence à accepter).</span></div>
+    <p class="muted">${CAPS.gpu?"🚀 GPU actif : "+esc(CAPS.gpu):"⚠ Calcul sur le processeur uniquement. Pour activer le GPU : fermez l'application, puis <code>.venv\\Scripts\\pip install --force-reinstall onnxruntime-directml</code> (Windows, toute carte DirectX 12) ou <code>onnxruntime-gpu</code> (NVIDIA + CUDA 12). <code>lancer.bat</code> le fait tout seul au premier lancement ; supprimez <code>.venv\\gpu.txt</code> pour refaire la détection."}</p>
     <p class="muted">Accélération : ${CAPS.providers.join(", ")||"onnxruntime absent"} · OCR : ${CAPS.ocr?"disponible":"absent (pip install rapidocr-onnxruntime)"} · HEIC : ${CAPS.heif?"oui":"non"} · recherche plein texte : ${CAPS.fts?"FTS5":"LIKE"}</p></div>
   <div class="panel"><h3>Visages</h3>
     <div class="row"><label class="opt">Moteur de visages <select id="s_eng"><option value="opencv">OpenCV YuNet + SFace (licence libre, moins précis)</option><option value="insightface">InsightFace SCRFD + ArcFace (précis, non commercial)</option></select></label></div>
@@ -753,6 +837,16 @@ async function loadSettings(){
       <label class="opt">Photo floue si netteté < <input type="number" step="1" id="s_blur" value="${SET.blur_min}" style="width:80px"></label>
       <button id="s_save" class="pri">Enregistrer</button></div>
     <p class="muted">Les données de visages restent sur ce PC (base locale) et ne sont jamais envoyées sur le réseau. Bouton d'effacement dans l'onglet Personnes.</p></div>`;
+  $("#auto_m").onchange=async e=>{await api("/api/models/auto",{enabled:e.target.checked});
+    toast(e.target.checked?"Téléchargement automatique activé":"Téléchargement automatique désactivé");autoLance=false;loadSettings()};
+  $("#dl_reco").onclick=async()=>{
+    const a=RECOMMANDES.filter(k=>M[k]&&!M[k].available);
+    if(!a.length)return toast("Les modèles conseillés sont déjà installés.");
+    const mo=Math.round(a.reduce((t,k)=>t+(M[k].size||0),0)/1048576);
+    if(!confirm(`Télécharger ${a.length} modèle(s) (~${mo} Mo) ?`))return;
+    for(const k of a){try{await api("/api/models/download",{name:k})}catch(e){toast(k+" : "+e.message,1)}}
+    loadSettings();
+  };
   $("#s_eng").value=SET.face_engine;
   $("#s_eng").onchange=async e=>{if(e.target.value==="insightface"&&!M.insightface.license_ok&&!$("#lic_if").checked){toast("Acceptez d'abord la licence InsightFace",1);e.target.value=SET.face_engine;return}
     await api("/api/settings",{face_engine:e.target.value});toast("Moteur de visages : "+e.target.value+". Relancez l'analyse avec le module Visages.");loadSettings()};

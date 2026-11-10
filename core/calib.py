@@ -6,6 +6,7 @@ vrais doublons sans accepter de faux (une fausse acceptation pèse 3 fois plus q
 Le résultat est enregistré comme rigueur « étalonnée ».
 """
 import json
+import os
 import random
 import time
 
@@ -15,7 +16,7 @@ from .config import RIGOR
 from .db import from_f16
 from .dupes import candidate_pairs, meta_check, pair_metrics
 from .scanner import load_fine
-from .util import to_u64
+from .util import lp, to_u64
 
 LOWER_IS_BETTER = ("b2", "bmax", "col", "ph")
 HIGHER_IS_BETTER = ("ncc",)
@@ -26,9 +27,26 @@ def _answered(db, kind):
     return {(r["a"], r["b"]) for r in db.q("SELECT a, b FROM calib WHERE kind=?", (kind,))}
 
 
-def next_dup_pair(db, sample=4000):
-    rows = db.q("SELECT id, phash, w, h, taken, cam FROM files WHERE kind='image' AND phash IS NOT NULL "
-                "ORDER BY RANDOM() LIMIT ?", (sample,))
+def _scope_sql(roots):
+    """(condition SQL, arguments) limitant aux fichiers du périmètre analysé."""
+    roots = [r for r in (roots or []) if r]
+    if not roots:
+        return "", []
+    from .scanner import prefix_range
+    conds, args = [], []
+    for r in roots:
+        a, b = prefix_range(r)
+        conds.append("(f.path >= ? AND f.path < ?)")
+        args += [a, b]
+    return " AND (" + " OR ".join(conds) + ")", args
+
+
+def next_dup_pair(db, sample=4000, roots=None):
+    w, wa = _scope_sql(roots)
+    rows = db.q("SELECT f.id, f.phash, f.w, f.h, f.taken, f.cam, f.path FROM files f "
+                "WHERE f.kind='image' AND f.phash IS NOT NULL AND f.status='ok'" + w +
+                " ORDER BY RANDOM() LIMIT ?", (*wa, sample))
+    rows = [r for r in rows if os.path.isfile(lp(r["path"]))]
     if len(rows) < 2:
         return None
     H = np.array([to_u64(r["phash"]) for r in rows], dtype=np.uint64)
@@ -64,8 +82,11 @@ def next_dup_pair(db, sample=4000):
     return {"kind": "dup", "a": best[1][0], "b": best[1][1], "metrics": best[2]}
 
 
-def next_face_pair(db, engine):
-    rows = db.q("SELECT id, emb, file_id FROM faces WHERE engine=? AND eligible=1 ORDER BY RANDOM() LIMIT 2000", (engine,))
+def next_face_pair(db, engine, roots=None):
+    w, wa = _scope_sql(roots)
+    rows = db.q("SELECT fa.id, fa.emb, fa.file_id FROM faces fa JOIN files f ON f.id=fa.file_id "
+                "WHERE fa.engine=? AND fa.eligible=1 AND f.status='ok'" + w +
+                " ORDER BY RANDOM() LIMIT 2000", (engine, *wa))
     if len(rows) < 2:
         return None
     E = np.stack([from_f16(r["emb"]) for r in rows])

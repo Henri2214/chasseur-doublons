@@ -1,7 +1,38 @@
 # Changelog
 
+## 2.3.0 - 2026-11-10
+### Ajouté
+- **Téléchargement automatique des modèles** au lancement (visages OpenCV, objets YOLOX-S, contenu CLIP ;
+  InsightFace reste sur accord de licence). Progression affichée dans le bandeau d'accueil, interrupteur
+  dans Réglages, option `--sans-modeles` pour s'en passer.
+- **GPU** : `lancer.bat` installe `onnxruntime-directml` au premier lancement si aucune accélération n'est
+  disponible (toute carte DirectX 12 : Intel, AMD, NVIDIA) ; `lancer.sh` installe `onnxruntime-gpu` si une
+  carte NVIDIA est détectée. `lancer.bat --cpu` pour rester sur le processeur, suppression de
+  `.venv\gpu.txt` pour refaire la détection. Réglages indique si le GPU est actif et, sinon, quoi faire.
+- **Nombre de miniatures par page** réglable : 50, 100, 200, 500 ou 1000 photos (Explorer, Similaires,
+  Recherche de personne) et 10 à 200 groupes (Doublons). Le choix est partagé par toutes les vues, ce qui
+  permet de sélectionner d'un coup une page entière.
+- **OCR livré avec l'application** : `rapidocr-onnxruntime` passe dans `requirements.txt` (avec le marqueur
+  `python_version < "3.13"`, lu correctement depuis un fichier), donc installé par `lancer.bat`.
+- **Puces cliquables dans l'aperçu plein écran** : personnes, objets et scènes reconnus deviennent des
+  boutons ; un clic ouvre l'Explorer filtré sur cet objet, cette personne ou cette scène.
+
+### Corrigé
+- **Miniatures instables** : une photo supprimée, déplacée ou hors du dossier analysé renvoyait une erreur 404
+  et laissait une case vide ; une image de remplacement est renvoyée à la place.
+- **Étalonnage** : il proposait des photos d'analyses précédentes, hors du dossier en cours (d'où les
+  vignettes manquantes). Il ne propose plus que des fichiers du dossier analysé et encore présents sur le
+  disque.
+- **Recherche de personne** : après une suppression, le rafraîchissement relançait la recherche avec une
+  référence périmée et affichait une erreur en boucle (`POST /api/psearch/run 400`).
+
 ## 2.2.0 - 2026-11-10
 ### Ajouté
+- **Modules grisés : on sait enfin pourquoi et quoi faire.** Un bandeau d'avertissement liste les modules
+  désactivés faute de modèles, avec un bouton « Télécharger les modèles conseillés » (visages OpenCV à
+  licence libre + YOLOX-S + CLIP, en une fois) ; chaque option grisée porte un bouton « ⤓ modèle » qui ouvre
+  Réglages sur la ligne du modèle concerné, mise en évidence ; l'option « Texte (OCR) » indique la commande
+  pip à lancer. Bouton « Télécharger les modèles conseillés » également dans Réglages.
 - **Photos similaires** : bouton « Similaires » sous chaque photo (Doublons, Explorer, Recherche de personne)
   et dans l'aperçu plein écran. Nouvel onglet qui sort toutes les photos ressemblant à celle choisie, même si
   ce ne sont pas des doublons, en combinant quatre sources : empreinte visuelle (pHash + comparaison fine,

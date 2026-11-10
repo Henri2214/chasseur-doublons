@@ -53,7 +53,10 @@ def test_parcours_complet(client, state, photos, tmp_path):
     fid = g["groups"][0]["files"][0]["id"]
     t = client.get("/api/thumb?id=%d&s=128" % fid)
     assert t.status_code == 200 and t.mimetype == "image/jpeg"
-    assert client.get("/api/thumb?id=99999").status_code == 404
+    # une miniature manquante ne casse jamais la grille : image de remplacement, pas d'erreur
+    miss = client.get("/api/thumb?id=99999")
+    assert miss.status_code == 200 and miss.mimetype == "image/svg+xml"
+    assert client.get("/api/file?id=99999").status_code == 404
     # rapport et performances
     rep = client.get("/api/report").get_json()
     assert "stages" in rep["stats"]

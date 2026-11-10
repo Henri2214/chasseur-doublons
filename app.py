@@ -24,13 +24,21 @@ def main(argv=None):
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--data", help="dossier des données (base SQLite, miniatures)")
     ap.add_argument("--models", help="dossier des modèles ONNX")
+    ap.add_argument("--cpu", action="store_true", help="géré par lancer.bat / lancer.sh : n'installe pas le GPU")
+    ap.add_argument("--sans-modeles", action="store_true", help="ne pas télécharger automatiquement les modèles")
     a = ap.parse_args(argv)
     kw = {}
     if a.data:
         kw["data_dir"] = a.data
     if a.models:
         kw["models_dir"] = a.models
-    app = create_app(State(**kw))
+    state = State(**kw)
+    if not getattr(a, "sans_modeles", False) and state.auto_models():
+        lances = state.mm.auto_download()
+        if lances:
+            print("Téléchargement automatique des modèles : %s (en arrière-plan, suivi dans Réglages)"
+                  % ", ".join(lances))
+    app = create_app(state)
     if a.host != "127.0.0.1":
         print("ATTENTION : l'interface permet de supprimer des fichiers. Exposez-la uniquement sur un réseau de confiance.")
         app.config["ALLOW_ANY_HOST"] = True

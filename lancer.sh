@@ -17,11 +17,22 @@ fi
 
 # ---- modules optionnels : un par un, un échec n'empêche pas les autres ------
 if [ ! -f .venv/optionnels.txt ]; then
-  echo "Modules optionnels (OCR, CLIP, RAW, tests)..."
+  echo "Modules optionnels (CLIP, RAW, tests)..."
   grep -v '^[[:space:]]*#' requirements-optional.txt | grep -v '^[[:space:]]*$' | while read -r p; do
     pip install "$p" || echo "  -- $p indisponible pour cette version de Python (ignoré)"
   done
   echo installes > .venv/optionnels.txt
+fi
+
+# ---- accélération GPU : CUDA si une carte NVIDIA est présente (sinon on reste sur le processeur) ----
+if [ ! -f .venv/gpu.txt ]; then
+  if [ "$1" != "--cpu" ] && command -v nvidia-smi >/dev/null 2>&1 \
+     && ! python -c "import onnxruntime,sys; sys.exit(0 if 'CUDAExecutionProvider' in onnxruntime.get_available_providers() else 1)" 2>/dev/null; then
+    echo "Activation du GPU (onnxruntime-gpu)..."
+    pip uninstall -y onnxruntime onnxruntime-gpu >/dev/null 2>&1
+    pip install onnxruntime-gpu || pip install onnxruntime
+  fi
+  echo fait > .venv/gpu.txt
 fi
 
 python app.py "$@"

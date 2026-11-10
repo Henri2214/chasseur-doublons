@@ -27,8 +27,24 @@ modules installés par `lancer.bat` ne sont pas visibles. Pour forcer une autre 
 `.venv` puis relancez `lancer.bat` (par exemple après `py -3.12 -m venv .venv`, qui est aussi accepté).
 
 Puis, dans la page : choisir un dossier, cocher les modules, cliquer sur « Analyser ».
-Les modèles d'IA se téléchargent dans l'onglet **Réglages**, avec une barre de progression. Les fonctions dont
-le modèle est absent sont grisées, avec un message qui explique pourquoi.
+Au premier lancement, les modèles conseillés (visages OpenCV, objets YOLOX-S, contenu CLIP) se téléchargent
+**automatiquement** en arrière-plan : la progression s'affiche dans le bandeau de la page d'accueil et les
+options s'activent toutes seules à la fin. Pour désactiver : case dans Réglages, ou `python app.py
+--sans-modeles`. InsightFace reste à part : sa licence (recherche non commerciale) demande votre accord.
+
+Le GPU est activé automatiquement : `lancer.bat` installe `onnxruntime-directml` au premier lancement si
+aucune accélération n'est disponible (Windows, toute carte DirectX 12 — Intel, AMD, NVIDIA), `lancer.sh`
+installe `onnxruntime-gpu` si une carte NVIDIA est présente. `lancer.bat --cpu` reste sur le processeur ;
+supprimez `.venv\gpu.txt` pour refaire la détection. Réglages indique le fournisseur réellement utilisé.
+Le GPU accélère les visages, les objets et CLIP ; la lecture des images reste faite par le processeur.
+
+Les modèles se gèrent aussi à la main dans l'onglet **Réglages**, avec une barre de progression — ou directement
+depuis le bandeau jaune de la page d'accueil, bouton « Télécharger les modèles conseillés » (visages OpenCV
+à licence libre, objets YOLOX-S, contenu CLIP ; InsightFace reste à part à cause de sa licence). Tant qu'un
+modèle manque, l'option correspondante (Visages, Objets, IA CLIP) est grisée : cliquez dessus ou sur son
+bouton « ⤓ modèle » pour arriver directement sur la ligne à télécharger. Sans aucun modèle, l'application
+fonctionne quand même : doublons exacts, doublons visuels, qualité et photos similaires par l'empreinte
+visuelle.
 
 Vérification de l'installation sur votre PC (tous les modules, GPU compris) :
 
@@ -112,6 +128,8 @@ modifiés (taille + date de modification) et purge les fichiers disparus.
   - résultats avec pourcentage de ressemblance, « Tout sélectionner » (toutes les pages), déplacer, supprimer,
     et « Affecter les visages trouvés à… » (personne existante ou nouvelle) pour compléter les regroupements ;
   - nécessite d'avoir analysé le dossier avec le module Visages, avec le même moteur (InsightFace ou OpenCV).
+- **Nombre de miniatures par page** : 50, 100, 200, 500 ou 1000 (10 à 200 groupes dans Doublons) — pratique
+  pour tout sélectionner d'un coup. Le réglage est commun à Explorer, Similaires et Recherche de personne.
 - **Explorer** :
   - une seule zone de recherche qui combine CLIP, objets, texte OCR, noms de personnes, scènes et noms de
     fichiers ;
@@ -119,6 +137,11 @@ modifiés (taille + date de modification) et purge les fichiers disparus.
   - résultats paginés et actions groupées (déplacement en masse par glisser-déposer) ;
   - **« Tout sélectionner »** : coche tous les résultats de la recherche, sur toutes les pages.
   - Sans CLIP, la recherche fonctionne quand même avec les objets, l'OCR et les personnes.
+  - Dans l'aperçu plein écran, les personnes, objets et scènes reconnus sont des **puces cliquables** : un
+    clic affiche toutes les photos qui contiennent la même chose (voiture, oiseau, ordinateur…).
+  - Les objets reconnus par YOLOX sont les 80 catégories COCO (personne, voiture, oiseau, ordinateur
+    portable, chien, vélo…). Pour une notion absente de cette liste (« bras », « coucher de soleil »,
+    « facture »), tapez-la dans la zone de recherche : c'est CLIP qui répond, en langage naturel.
 - **Étalonnage** : « ces deux photos sont-elles des doublons ? » et « est-ce la même personne ? ». Vos réponses
   ajustent les seuils ; une fausse détection pèse trois fois plus qu'un doublon manqué.
 - **Rapport** : fichiers ignorés avec leur cause, images/seconde par étape, durée de chaque phase.

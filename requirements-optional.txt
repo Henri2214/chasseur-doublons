@@ -5,11 +5,6 @@
 
 # Recherche en langage naturel et scènes (CLIP ONNX) : lecture du tokenizer
 tokenizers>=0.15
-# Texte dans les images (OCR) : modèles inclus dans le paquet.
-# Dernière version publiée : 1.2.3, et uniquement pour Python <= 3.12. Sur une version plus récente de
-# Python, l'installation de cette ligne échoue et est simplement ignorée (OCR indisponible).
-# Pas de marqueur « ; python_version ... » ici : cmd.exe perd les guillemets et pip refuse la ligne.
-rapidocr-onnxruntime>=1.2.3
 # Photos RAW d'appareils (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF...) : aperçu intégré ou demi-résolution
 rawpy
 # Mesure mémoire de tools/bench.py

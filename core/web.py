@@ -56,6 +56,9 @@ class State:
                 self._face_engines[name] = make_engine(self.mm, name)
             return self._face_engines[name]
 
+    def auto_models(self):
+        return str(self.db.get_setting("auto_models", "1")) not in ("0", "False", "false")
+
     def clip(self):
         with self._clip_lock:
             if self._clip is None and self.mm.available("clip"):
@@ -108,6 +111,8 @@ def create_app(state=None):
             "ocr": importlib.util.find_spec("rapidocr_onnxruntime") is not None,
             "onnx": importlib.util.find_spec("onnxruntime") is not None,
             "providers": providers(), "fts": S.db.fts,
+            "gpu": next((p for p in providers() if p != "CPUExecutionProvider"), ""),
+            "auto_models": S.auto_models(),
         }
 
     @app.get("/api/caps")
@@ -147,6 +152,15 @@ def create_app(state=None):
         except KeyError:
             return err("modèle inconnu", 404)
         return jsonify(ok=True)
+
+    @app.post("/api/models/auto")
+    def api_model_auto():
+        """Active/désactive le téléchargement automatique et lance ce qui manque."""
+        d = body()
+        if "enabled" in d:
+            S.db.set_setting("auto_models", "1" if d["enabled"] else "0")
+        started = S.mm.auto_download() if S.auto_models() else []
+        return jsonify(started=started, auto_models=S.auto_models())
 
     @app.post("/api/models/delete")
     def api_model_delete():
@@ -221,7 +235,7 @@ def create_app(state=None):
     @app.get("/api/groups")
     def api_groups():
         a = request.args
-        return jsonify(dupes.page(S.db, S.result, int(a.get("page", 1)), min(100, int(a.get("per", 20))),
+        return jsonify(dupes.page(S.db, S.result, int(a.get("page", 1)), min(500, int(a.get("per", 20))),
                                   a.get("sort", "waste"), a.get("kind", "all")))
 
     @app.get("/api/group_ids")
@@ -306,7 +320,9 @@ def create_app(state=None):
 
     @app.get("/api/thumb")
     def api_thumb():
-        r = file_row(int(request.args.get("id", 0)))
+        r = S.db.one("SELECT id, path, kind, size, mtime FROM files WHERE id=?", (int(request.args.get("id", 0)),))
+        if not r or not S.scope.contains(r["path"]) or not os.path.isfile(lp(r["path"])):
+            return placeholder("absent")       # jamais de vignette cassée dans la grille
         s = max(64, min(int(request.args.get("s", 320)), 800))
         ext = os.path.splitext(r["path"])[1].lower()
         if r["kind"] == "other":
@@ -452,7 +468,7 @@ def create_app(state=None):
     def api_person_faces():
         a = request.args
         pid = a.get("id")
-        page, per = int(a.get("page", 1)), min(300, int(a.get("per", 120)))
+        page, per = int(a.get("page", 1)), min(1000, int(a.get("per", 120)))
         if pid == "none":
             eng = a.get("engine") or S.db.get_setting("face_engine", "opencv")
             rows = S.db.q("SELECT id, file_id, locked, eligible, px FROM faces WHERE person_id IS NULL AND engine=? "
@@ -518,7 +534,7 @@ def create_app(state=None):
         a = request.args
         filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to")
                    if a.get(k)}
-        res = search.search(S.db, a.get("q", ""), filters, int(a.get("page", 1)), min(200, int(a.get("per", 60))),
+        res = search.search(S.db, a.get("q", ""), filters, int(a.get("page", 1)), min(1000, int(a.get("per", 60))),
                             S.clip() if a.get("q") else None)
         res["files"] = [f for f in res["files"] if S.scope.contains(f["path"])]
         return jsonify(res)
@@ -563,7 +579,7 @@ def create_app(state=None):
             fid, res = run_similar(a)
         except ValueError as e:
             return err(str(e))
-        page, per = max(1, int(a.get("page", 1))), min(200, int(a.get("per", 60)))
+        page, per = max(1, int(a.get("page", 1))), min(1000, int(a.get("per", 60)))
         sl = res[(page - 1) * per: page * per]
         h = search._hydrate(S.db, [r[0] for r in sl], len(res), page, per, {}, [])
         by = {r[0]: r for r in sl}
@@ -675,7 +691,7 @@ def create_app(state=None):
             return err(str(e))
         if d.get("ids_only"):
             return jsonify(ids=[r[0] for r in res], total=len(res))
-        page, per = max(1, int(d.get("page", 1))), min(200, int(d.get("per", 60)))
+        page, per = max(1, int(d.get("page", 1))), min(1000, int(d.get("per", 60)))
         sl = res[(page - 1) * per: page * per]
         h = search._hydrate(S.db, [r[0] for r in sl], len(res), page, per, {}, ["visage"])
         names = {r["id"]: r["name"] for r in S.db.q("SELECT id, name FROM persons WHERE engine=?", (eng,))}
@@ -720,16 +736,21 @@ def create_app(state=None):
         return jsonify(id=persons.create_person(S.db, eng, d.get("name", "")))
 
     # ------------------------------------------------------------ étalonnage
+    def calib_roots():
+        """Dossier de la session d'analyse : l'étalonnage ne propose que des photos visibles ici."""
+        r = S.scanner.state.get("root") or S.last_opts.get("root")
+        return [r] if r else []
+
     @app.get("/api/calib/next")
     def api_calib_next():
         kind = request.args.get("kind", "dup")
         if kind == "face":
-            p = calib.next_face_pair(S.db, S.db.get_setting("face_engine", "opencv"))
+            p = calib.next_face_pair(S.db, S.db.get_setting("face_engine", "opencv"), calib_roots())
             if p:
                 for k in ("a", "b"):
                     p[k + "_file"] = S.db.one("SELECT file_id FROM faces WHERE id=?", (p[k],))["file_id"]
         else:
-            p = calib.next_dup_pair(S.db)
+            p = calib.next_dup_pair(S.db, roots=calib_roots())
         return jsonify(pair=p, stats=calib.stats(S.db))
 
     @app.post("/api/calib/answer")

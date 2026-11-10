@@ -65,6 +65,10 @@ REGISTRY = {
 }
 
 
+# Modèles téléchargés automatiquement au premier lancement (licences libres uniquement).
+RECOMMENDED = ("opencv_faces", "yolox_s", "clip")
+
+
 def providers():
     """Fournisseurs onnxruntime disponibles, dans l'ordre CUDA, DirectML, CPU."""
     if ort is None:
@@ -112,6 +116,24 @@ class ModelManager:
         return out
 
     # ------------------------------------------------------------ téléchargement
+    def auto_download(self, names=None):
+        """Lance en arrière-plan le téléchargement des modèles conseillés qui manquent.
+
+        InsightFace en est exclu : sa licence (recherche non commerciale) exige un accord explicite."""
+        started = []
+        for name in (names or RECOMMENDED):
+            try:
+                if self.available(name) or not self.license_ok(name):
+                    continue
+                cur = self.progress.get(name)
+                if cur and cur.get("status") == "running":
+                    continue
+                self.download(name)
+                started.append(name)
+            except Exception:       # un modèle indisponible ne doit jamais empêcher le démarrage
+                continue
+        return started
+
     def download(self, name, background=True):
         if name not in REGISTRY:
             raise KeyError(name)
