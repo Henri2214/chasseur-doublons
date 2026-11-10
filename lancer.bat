@@ -16,7 +16,7 @@ if not exist ".venv\Scripts\python.exe" (
 call .venv\Scripts\activate.bat
 
 rem ---- dependances de base (verifiees a chaque lancement, pas seulement a la creation) ----
-python -c "import flask, PIL, numpy, cv2, onnxruntime, pillow_heif" 2>nul
+python -c "import flask, PIL, numpy, cv2, onnxruntime, pillow_heif, pypdfium2, olefile" 2>nul
 if errorlevel 1 (
   echo Installation des dependances...
   python -m pip install --upgrade pip

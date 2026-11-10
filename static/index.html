@@ -44,7 +44,7 @@ main{padding:14px 20px 80px;flex:1;min-width:0}
 .group{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
 .ghead{display:flex;gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
 .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
-.b-exact{background:#1f4d3a;color:var(--ok)}.b-visuel{background:#4d3a14;color:var(--warn)}.b-warn{background:#4d1f1f;color:#ffb3b3}
+.b-exact{background:#1f4d3a;color:var(--ok)}.b-contenu,.b-mail{background:#1d3a5c;color:#8fc1ff}.b-proche{background:#4d3a14;color:var(--warn)}.b-visuel{background:#4d3a14;color:var(--warn)}.b-warn{background:#4d1f1f;color:#ffb3b3}
 .ghead .sp{flex:1}.ghead small{color:var(--mut)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--w,190px),1fr));gap:12px;padding:12px}
 .card{background:var(--bg);border:2px solid transparent;border-radius:8px;position:relative;overflow:hidden}
@@ -67,6 +67,12 @@ main{padding:14px 20px 80px;flex:1;min-width:0}
 #lb,#modal{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:50;flex-direction:column}
 #lb img,#lb video{max-width:94vw;max-height:78vh}
 #lbc{position:relative;display:inline-block;line-height:0}
+#lbc .doc{line-height:1.45;background:#fff;color:#111;width:min(900px,92vw);height:74vh;overflow:auto;padding:22px 28px;border-radius:8px;white-space:pre-wrap;font:14px/1.5 system-ui,sans-serif;text-align:left}
+#lbc .doc h4{margin:0 0 10px;font-size:15px}#lbc .doc .hd{color:#555;font-size:12px;margin-bottom:12px;border-bottom:1px solid #ddd;padding-bottom:8px;white-space:normal}
+#lbc iframe{width:min(1000px,94vw);height:76vh;border:0;background:#fff;border-radius:8px}
+.snip{color:var(--mut);font-size:11px;margin-top:3px;max-height:4.2em;overflow:hidden;font-style:italic}
+#quit{margin-left:auto}#lbcap a{text-decoration:none}#lbcap a button{color:inherit}
+#bye{position:fixed;inset:0;background:var(--bg,#151923);z-index:99;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;font-size:18px;text-align:center}
 #lbc.zone img{cursor:crosshair}
 #zrect{position:absolute;border:2px solid #4c8dff;background:rgba(76,141,255,.22);pointer-events:none;display:none}
 #lb .cap{color:#fff;margin-top:10px;text-align:center;max-width:90vw;word-break:break-all}
@@ -119,7 +125,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 </head>
 <body>
 <header id="head">
-  <h1>🔍 Chasseur de doublons <small>v__VERSION__ · local, rien ne quitte votre PC</small></h1>
+  <h1>🔍 Chasseur de doublons <small>v__VERSION__ · local, rien ne quitte votre PC</small><button id="quit" class="bad" title="Arrête complètement l'application : plus aucun processus ne tourne en arrière-plan. À utiliser quand vous avez terminé.">⏻ Quitter</button></h1>
   <div class="row">
     <input type="text" id="path" class="grow" placeholder="Dossier à analyser (ex. D:\Photos ou /mnt/nas/photos)">
     <button id="browse">Parcourir…</button>
@@ -130,12 +136,14 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <div class="mods">
       <label class="opt"><input type="checkbox" id="o_images" checked><b>Images</b></label>
       <label class="opt"><input type="checkbox" id="o_videos" checked><b>Vidéos</b></label>
-      <label class="opt"><input type="checkbox" id="o_others"><b>Autres</b></label>
+      <label class="opt" title="Word, PDF, Excel, PowerPoint, OpenDocument, texte, courriels (.eml, .msg) : comparés bit à bit ET par leur contenu"><input type="checkbox" id="o_docs" checked><b>Documents</b></label>
+      <label class="opt" title="Tous les autres fichiers (archives, programmes, musique...) : comparés bit à bit (SHA-256)"><input type="checkbox" id="o_others" checked><b>Autres</b></label>
       <label class="opt">min. <input type="number" id="min_kb" value="0" min="0" style="width:70px"> Ko</label>
     </div>
     <div class="mods" title="Modules activables séparément">
       <label class="opt"><input type="checkbox" id="m_exact" checked><b>Exacts</b></label>
       <label class="opt"><input type="checkbox" id="m_visual" checked><b>Visuel</b></label>
+      <label class="opt" title="Lit le texte des documents (Word, PDF, tableurs, courriels...) pour retrouver le même contenu dans des fichiers différents, les versions proches d'un document, et pour chercher un mot dans l'onglet Explorer. Les PDF scannés sont lus par OCR si « Texte » n'est pas sur « aucun »."><input type="checkbox" id="m_doctext" checked><b>Contenu des documents</b></label>
       <label class="opt" id="l_faces"><input type="checkbox" id="m_faces"><b>Visages</b></label>
       <label class="opt" id="l_objects"><input type="checkbox" id="m_objects"><b>Objets</b></label>
       <label class="opt" id="l_ocr">Texte <select id="m_ocr"><option value="aucun">aucun</option><option value="auto">captures/documents</option><option value="toutes">toutes les images</option></select></label>
@@ -166,7 +174,8 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <label class="opt">rigueur <select id="rig"><option value="tres_strict">très stricte</option><option value="strict" selected>stricte (recommandé)</option><option value="normal">normale</option><option value="large">large</option><option value="etalonne" id="rig_cal" disabled>étalonnée</option></select></label>
     <label class="opt" title="Deux photos de dates de prise de vue EXIF différentes ne sont jamais groupées. Sans date EXIF, le contrôle est ignoré et signalé."><input type="checkbox" id="o_exif" checked><b>Dates EXIF</b></label>
     <label class="opt" id="l_cd"><input type="checkbox" id="o_clipd"><b>IA</b> ≥ <input type="number" id="clip_thr" value="0.96" step="0.01" min="0.85" max="0.99" style="width:70px"></label>
-    <select id="f_kind"><option value="all">Tous</option><option value="exact">Identiques</option><option value="visuel">Similaires</option><option value="image">Images</option><option value="video">Vidéos</option><option value="other">Autres</option></select>
+    <select id="f_kind"><option value="all">Tous</option><option value="exact">Identiques (bit à bit)</option><option value="visuel">Photos / vidéos similaires</option><option value="contenu">Documents : même contenu</option><option value="proche">Documents : versions proches</option><option value="mail">Courriels en double</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents</option><option value="other">Autres fichiers</option></select>
+    <label class="opt" title="Deux documents sont des « versions proches » si cette part de leur texte est commune.">documents ≥ <select id="doc_thr"><option value="0.95">95 %</option><option value="0.9">90 %</option><option value="0.8" selected>80 %</option><option value="0.7">70 %</option><option value="0.6">60 %</option><option value="0.5">50 %</option></select></label>
     <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option></select>
     <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures">
     <label class="opt">par page <select id="perg"><option value="10">10 groupes</option><option value="20" selected>20</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select></label>
@@ -189,9 +198,9 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 
 <!-- ============ EXPLORER ============ -->
 <section class="tab" id="t_exp">
-  <div class="row"><input type="search" id="xq" class="grow" placeholder="Rechercher : « chien sur la plage », « facture EDF », un nom de personne, un objet…"><button id="xgo" class="pri">Rechercher</button></div>
+  <div class="row"><input type="search" id="xq" class="grow" placeholder="Rechercher : « chien sur la plage », « facture EDF », un mot d'un document ou d'un courriel, une personne, un objet…"><button id="xgo" class="pri">Rechercher</button></div>
   <div class="row">
-    <select id="xkind"><option value="">Tous types</option><option value="image">Images</option><option value="video">Vidéos</option><option value="other">Autres</option></select>
+    <select id="xkind"><option value="">Tous types</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents (tous)</option><option value="pdf">— PDF</option><option value="word">— Word / ODT / RTF</option><option value="tableur">— Tableurs</option><option value="presentation">— Présentations</option><option value="mail">— Courriels</option><option value="texte">— Texte / HTML</option></select>
     <select id="xperson"><option value="">Toute personne</option></select>
     <select id="xobject"><option value="">Tout objet</option></select>
     <select id="xscene"><option value="">Toute scène</option></select>
@@ -287,6 +296,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
   <div class="row" style="justify-content:flex-end;margin:0"><button id="mcancel">Annuler</button><button id="mok" class="pri">Choisir ce dossier</button></div>
 </div></div>
 <div id="toast"></div>
+<div id="bye"><div>✅ Chasseur de doublons est arrêté.</div><small class="muted">Plus aucun processus ne tourne. Vous pouvez fermer cet onglet.<br>Pour revenir, relancez l'application.</small></div>
 
 <script>
 const TOKEN="__TOKEN__";
@@ -383,11 +393,11 @@ async function openModels(key){
 }
 
 // ---------------------------------------------------------------- analyse
-function scanOpts(){return{images:$("#o_images").checked,videos:$("#o_videos").checked,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,
+function scanOpts(){return{images:$("#o_images").checked,videos:$("#o_videos").checked,documents:$("#o_docs").checked,doc_text:$("#m_doctext").checked,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,
   exact:$("#m_exact").checked,visual:$("#m_visual").checked,faces:$("#m_faces").checked,objects:$("#m_objects").checked,ocr:$("#m_ocr").value,
   clip:$("#m_clip").checked,quality:$("#m_quality").checked,force:$("#m_force").checked,vframes:+$("#vprec").value,face_engine:SET.face_engine||"opencv",face_det:$("#fdet").value}}
 function dupOpts(){return{rigor:$("#rig").value,exif:$("#o_exif").checked,clip_dupes:$("#o_clipd").checked,clip_thr:+$("#clip_thr").value,
-  images:$("#o_images").checked,videos:$("#o_videos").checked,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,exact:$("#m_exact").checked,visual:$("#m_visual").checked}}
+  images:$("#o_images").checked,videos:$("#o_videos").checked,documents:$("#o_docs").checked,doc_content:$("#m_doctext").checked,doc_thr:+$("#doc_thr").value,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,exact:$("#m_exact").checked,visual:$("#m_visual").checked}}
 $("#go").onclick=async()=>{
   const path=$("#path").value.trim();if(!path)return toast("Indiquez un chemin",1);
   try{await api("/api/scan",{path,options:scanOpts()});sel.clear();started=true;cancelling=false;phaseBase="";
@@ -421,7 +431,7 @@ async function poll(){
   if(s.root){if(!$("#path").value)$("#path").value=s.root;if(s.root!==scanRoot){scanRoot=s.root;initTree()}}
   s.warnings.forEach(w=>toast(w,1));
   if(s.status==="done"){const m=s.summary||{};$("#m_force").checked=false;
-    phaseBase=`Analyse terminée en ${s.elapsed}s.`+(m.files!=null?` ${m.files} fichier(s) dans le dossier : ${m.new||0} nouveau(x), ${m.changed||0} modifié(s), ${m.removed||0} disparu(s), ${m.unchanged||0} inchangé(s) repris de l'index — ${m.to_analyse||0} analysé(s) cette fois.`:"");$("#phase").textContent=phaseBase;if(lastStatus==="running"||!s.has_results)await recompute();else loadGroups()}
+    phaseBase=`Analyse terminée en ${s.elapsed}s.`+(m.files!=null?` ${m.files} fichier(s) dans le dossier : ${m.new||0} nouveau(x), ${m.changed||0} modifié(s), ${m.removed||0} disparu(s), ${m.unchanged||0} inchangé(s) repris de l'index — ${m.to_analyse||0} analysé(s) cette fois`+(m.docs_new?`, dont ${m.docs_new} document(s) lu(s)`:"")+".":"");$("#phase").textContent=phaseBase;if(lastStatus==="running"||!s.has_results)await recompute();else loadGroups()}
   else if(s.status==="error"){$("#phase").textContent="Erreur : "+s.error;toast(s.error,1)}
   else if(s.status==="cancelled"){$("#phase").textContent="Analyse annulée.";if(started){toast("Analyse annulée.");$("#res").innerHTML='<div class="empty">Analyse annulée.</div>'}}
   started=false;lastStatus=s.status;
@@ -436,7 +446,7 @@ async function recompute(){
     page=1;loadGroups()}
   catch(e){$("#phase").textContent=phaseBase;toast(e.message,1)}
 }
-["rig","o_exif","o_clipd","clip_thr"].forEach(i=>$("#"+i).onchange=()=>{sel.clear();recompute()});
+["rig","o_exif","o_clipd","clip_thr","doc_thr"].forEach(i=>$("#"+i).onchange=()=>{sel.clear();recompute()});
 
 // ---------------------------------------------------------------- doublons (pagination serveur)
 let page=1,PER=20,PHOTOS=50,gdata=null;
@@ -452,19 +462,21 @@ document.querySelectorAll(".perp").forEach(sel=>{sel.value=PHOTOS;sel.onchange=e
 $("#f_size").oninput=()=>document.documentElement.style.setProperty("--w",$("#f_size").value+"px");
 function cardHtml(f,g,selset){
   const dim=f.w&&f.h?` · ${f.w}×${f.h}`:"";let tags="";
-  if(g&&g.kind==="visuel")tags+=f.ref?`<span class="tag" style="background:#3ecf8e">réf.</span>`:(f.score!=null?`<span class="tag" style="background:${f.score>=98?"#3ecf8e":f.score>=94?"#f5a524":"#ef5b5b"}" title="Similarité avec la référence">${f.score} %</span>`:"");
+  if(g&&g.kind!=="exact")tags+=f.ref?`<span class="tag" style="background:#3ecf8e">réf.</span>`:(f.score!=null?`<span class="tag" style="background:${f.score>=98?"#3ecf8e":f.score>=94?"#f5a524":"#ef5b5b"}" title="${g.media==="doc"?"Part du texte commune avec la référence":"Similarité avec la référence"}">${f.score} %</span>`:"");
   if(f.why&&f.why.length)tags+=`<span class="tag" style="background:#6c7a94" title="Source de la ressemblance">${esc(f.why[0])}</span>`;
   if(f.sim!=null)tags+=`<span class="tag" style="background:${f.sim>=0.6?"#3ecf8e":f.sim>=0.45?"#f5a524":"#ef5b5b"}" title="Ressemblance du visage avec la référence (cosinus ${f.sim})">${Math.round(f.sim*100)} %</span>`+(f.person_name&&!f.known?`<span class="tag" style="background:#4c8dff" title="Visage déjà rangé dans cette personne">${esc(f.person_name)}</span>`:"");
   if(f.best)tags+=`<span class="tag" style="background:#ffd166" title="Meilleure photo du groupe (netteté, résolution, yeux ouverts) – score ${f.quality}">★ meilleure</span>`;
   if(f.closed_eyes)tags+=`<span class="tag" style="background:#ff9f80" title="Yeux probablement fermés">yeux fermés</span>`;
-  if(g&&f.sub!=null&&g.kind==="visuel"){const ci=g._subs.indexOf(f.sub);tags+=`<span class="tag" style="background:${COLORS[ci%COLORS.length]}" title="Identique bit à bit aux fichiers de même couleur">=</span>`}
-  const date=f.taken?`<span title="Date de prise de vue EXIF">📷 ${fmtDate(f.taken,true)}</span>`:`<span title="Pas de date EXIF (le contrôle de date est ignoré). Date de modification du fichier :">⚠ sans EXIF · modifié ${fmtDate(f.mtime)}</span>`;
+  if(g&&f.sub!=null&&g.kind!=="exact"){const ci=g._subs.indexOf(f.sub);tags+=`<span class="tag" style="background:${COLORS[ci%COLORS.length]}" title="Identique bit à bit aux fichiers de même couleur">=</span>`}
+  const isDoc=f.kind==="doc"||f.kind==="other";
+  const docm=f.kind==="doc"?[f.pages?f.pages+" p.":"",f.words?f.words+" mots":(f.method==="erreur"?"contenu illisible":f.method?"sans texte":"contenu non lu"),f.method==="ocr"?"OCR":"",f.method==="approx"?"lecture approximative":""].filter(Boolean).join(" · "):"";
+  const date=isDoc?(f.mdate?`<span title="Date d'envoi du courriel">✉ ${fmtDate(f.mdate)}${f.sender?" · "+esc(f.sender):""}</span>`:`<span>modifié ${fmtDate(f.mtime)}</span>`):f.taken?`<span title="Date de prise de vue EXIF">📷 ${fmtDate(f.taken,true)}</span>`:`<span title="Pas de date EXIF (le contrôle de date est ignoré). Date de modification du fichier :">⚠ sans EXIF · modifié ${fmtDate(f.mtime)}</span>`;
   return `<div class="card${selset.has(f.id)?" sel":""}" data-id="${f.id}" draggable="true">
     <div class="thumb" data-act="view"><img draggable="false" loading="lazy" src="/api/thumb?id=${f.id}&s=400" alt="">
       <div class="chk" data-act="sel"><input type="checkbox" tabindex="-1" ${selset.has(f.id)?"checked":""}></div>
       <div class="tags">${tags}</div>${f.kind==="video"?`<span class="vid">▶ ${f.dur?fmtDur(f.dur):""}</span>`:""}</div>
-    <div class="info"><div class="name">${esc(f.name)}</div><div class="meta">${fmtSize(f.size)}${dim}</div><div class="meta">${date}</div>
-    <div class="path">${esc(f.folder)}</div><div class="acts"><button data-act="sim" title="Retrouver toutes les photos qui ressemblent à celle-ci">Similaires</button><button data-act="ren">Renommer</button><button data-act="del">Supprimer</button></div></div></div>`;
+    <div class="info"><div class="name">${esc(f.name)}</div><div class="meta">${fmtSize(f.size)}${dim}${docm?" · "+docm:""}</div><div class="meta">${date}</div>${f.snippet?`<div class="snip">${esc(f.snippet)}</div>`:""}
+    <div class="path">${esc(f.folder)}</div><div class="acts">${f.kind==="other"?"":`<button data-act="sim" title="Retrouver tout ce qui ressemble à ce fichier (photos semblables, ou documents au texte voisin)">Similaires</button>`}<button data-act="ren">Renommer</button><button data-act="del">Supprimer</button></div></div></div>`;
 }
 function renderGroups(){
   const d=gdata;byId={};
@@ -475,7 +487,7 @@ function renderGroups(){
   for(const g of d.groups){
     g._subs=[...new Set(g.files.filter(f=>f.sub!=null).map(f=>f.sub))];
     g.files.forEach(f=>byId[f.id]=f);
-    h+=`<section class="group"><div class="ghead"><span class="badge b-${g.kind}">${g.kind==="exact"?"IDENTIQUES":"SIMILAIRES"}</span>
+    h+=`<section class="group"><div class="ghead"><span class="badge b-${g.kind}" title="${({exact:"Fichiers identiques bit à bit (SHA-256)",visuel:"Images ou vidéos visuellement identiques",contenu:"Même texte dans des fichiers différents (autre format, ré-enregistrement, métadonnées)",proche:"Versions proches d'un même document : lisez avant de supprimer",mail:"Même courriel (même identifiant de message)"})[g.kind]||""}">${({exact:"IDENTIQUES",visuel:"SIMILAIRES",contenu:"MÊME CONTENU",proche:"VERSIONS PROCHES",mail:"MÊME COURRIEL"})[g.kind]||g.kind}</span>
       ${g.nodate?`<span class="badge b-warn" title="Au moins une photo sans date EXIF : le contrôle de date a été ignoré. Vérifiez avant de supprimer.">date non vérifiée</span>`:""}
       <b>${g.files.length} fichiers</b><small>récupérable : ${fmtSize(g.waste)}</small><span class="sp"></span>
       <button data-act="gbest" data-g="${g.id}">Garder la meilleure</button><button data-act="gall" data-g="${g.id}">Tout cocher sauf la réf.</button><button data-act="gfull" data-g="${g.id}" title="Coche toutes les photos de ce groupe">Tout cocher</button></div><div class="grid">`;
@@ -547,7 +559,23 @@ async function doRename(f){
   const n=prompt("Nouveau nom :",f.name);if(!n||n===f.name)return;
   try{const r=await api("/api/rename",{id:f.id,name:n});toast("Renommé en "+n,false,{label:"Annuler",fn:()=>undo([r.journal])});refreshAll()}catch(er){toast(er.message,1)}
 }
+function viewDoc(f){
+  const src="/api/file?id="+f.id,pdf=/\.pdf$/i.test(f.name||f.path||"");
+  $("#lbc").innerHTML=`<div class="doc">Lecture…</div>`;zoneOff();
+  $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+(f.kind==="doc"?' <button id="lbsim">Documents similaires</button>':"")+(pdf?' <button id="lbpdf">Afficher le PDF</button>':"")+` <a href="${src}" download><button>Télécharger / ouvrir</button></a>`;
+  $("#lbdet").textContent="";$("#lb").style.display="flex";
+  $("#lbcap").onclick=ev=>ev.stopPropagation();
+  if($("#lbsim"))$("#lbsim").onclick=()=>{closeLb();openSimilar(f)};
+  if($("#lbpdf"))$("#lbpdf").onclick=()=>{$("#lbc").innerHTML=`<iframe src="${src}"></iframe>`};
+  api("/api/info?id="+f.id).then(r=>{const d=r.doc;const box=$("#lbc .doc");if(!box)return;
+    if(!d){box.textContent="Ce type de fichier n'est comparé que bit à bit : son contenu n'est pas lu.";return}
+    const x=d.extra||{},hd=[d.family,d.pages?d.pages+" page(s)":"",d.words?d.words+" mots":"",d.method==="ocr"?"texte lu par OCR":"",d.method==="approx"?"lecture approximative (ancien format)":""].filter(Boolean).join(" · ");
+    box.innerHTML=`<div class="hd">${esc(hd)}${x.de?`<br>De : ${esc(x.de)}`:""}${x.a?`<br>À : ${esc(x.a)}`:""}${d.mdate?`<br>Envoyé le ${fmtDate(d.mdate)}`:""}${x.pieces&&x.pieces.length?`<br>Pièces jointes : ${esc(x.pieces.join(", "))}`:""}</div>`+
+      (d.error?`<b>Contenu non lu : ${esc(d.error)}</b>`:d.text?esc(d.text)+(d.chars>d.text.length?"\n\n[… texte tronqué pour l'aperçu …]":""):"<i>Aucun texte dans ce document"+(pdf?" (PDF scanné ? relancez l'analyse avec « Texte » sur « captures/documents » pour l'OCR)":"")+".</i>")}).catch(e=>{const b=$("#lbc .doc");if(b)b.textContent="Aperçu impossible : "+e.message});
+}
+$("#lbc").addEventListener("click",e=>{if(e.target.closest(".doc,iframe"))e.stopPropagation()});
 function view(f){
+  if(f.kind==="doc"||f.kind==="other")return viewDoc(f);
   const src="/api/file?id="+f.id;
   $("#lbc").innerHTML=f.kind==="video"?`<video src="${src}" controls autoplay></video>`:`<img src="${f.kind==="image"?src:"/api/thumb?id="+f.id+"&s=600"}">`;
   $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+' <button id="lbsim">Photos similaires</button>'+(f.kind==="image"?' <button id="lbzone" title="Tracez un rectangle autour d\'un objet, d\'un visage ou d\'un détail : toutes les photos qui contiennent la même chose ressortent">🔲 Chercher une zone</button>':"");
@@ -571,6 +599,10 @@ function view(f){
     if(!objs.length&&!r.faces.length&&!r.scenes.length)h+='<div class="muted">Aucun visage ni objet reconnu ici : lancez une analyse avec les modules Visages et Objets cochés.</div>';
     $("#lbdet").innerHTML=h}).catch(()=>{});
 }
+$("#quit").onclick=async()=>{
+  if(!confirm("Arrêter complètement Chasseur de doublons ?\n\nL'analyse en cours (s'il y en a une) sera interrompue ; l'index déjà construit est conservé."))return;
+  try{await api("/api/quit",{})}catch(e){}
+  clearTimeout(pollT);$("#bye").style.display="flex";setTimeout(()=>{try{window.close()}catch(e){}},600)};
 function closeLb(){zoneOff();$("#lb").style.display="none";$("#lbc").innerHTML=""}
 // ---- tracé d'une zone sur la photo agrandie
 let zoneF=null,zoneDrag=null;

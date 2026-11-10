@@ -9,7 +9,7 @@ fi
 . .venv/bin/activate
 
 # ---- dépendances de base (vérifiées à chaque lancement) ---------------------
-if ! python -c "import flask, PIL, numpy, cv2, onnxruntime, pillow_heif" 2>/dev/null; then
+if ! python -c "import flask, PIL, numpy, cv2, onnxruntime, pillow_heif, pypdfium2, olefile" 2>/dev/null; then
   echo "Installation des dépendances..."
   python -m pip install --upgrade pip
   pip install -r requirements.txt || { echo "Échec de l'installation des dépendances."; exit 1; }

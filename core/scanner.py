@@ -23,10 +23,10 @@ from .util import explain_oserror, is_cloud_placeholder, kind_of, lp, to_i64, un
 RESET_COLS = ("status='new', error=NULL, w=NULL, h=NULL, taken=NULL, cam=NULL, has_exif_cam=0, phash=NULL, "
               "fine=NULL, colg=NULL, detail=NULL, blur=NULL, dur=NULL, nframes=NULL, vn=NULL, vsig=NULL, vcol=NULL, "
               "phash_part=NULL, sha256=NULL, done_visual=0, done_faces=NULL, done_objects=0, done_ocr=0, "
-              "done_clip=0, done_quality=0")
+              "done_clip=0, done_quality=0, done_doc=0")
 
 DEFAULT_OPTS = {
-    "images": True, "videos": True, "others": False, "min_kb": 0, "vframes": 12, "skip_cloud": True,
+    "images": True, "videos": True, "documents": True, "others": False, "doc_text": True, "min_kb": 0, "vframes": 12, "skip_cloud": True,
     "exact": True, "visual": True, "faces": False, "objects": False, "ocr": "aucun", "clip": False,
     "quality": True, "face_engine": "opencv", "face_det": "equilibre", "yolox": "yolox_s",
 }
@@ -115,6 +115,8 @@ class Scanner:
             # témoin : s'il est encore là au prochain démarrage, c'est que l'analyse a fait tomber le programme
             if o.get("faces") or o.get("objects") or o.get("clip"):
                 self.db.set_setting("analyse_en_cours", {"gpu": bool(self.mm.gpu_providers())})
+            if o.get("documents") and o.get("doc_text", True):
+                self._documents(root, o, stats)
             self._analyse(root, o, stats)
             if o.get("faces") and stats.get("faces_new"):
                 self._phase("Regroupement des visages en personnes")
@@ -211,7 +213,7 @@ class Scanner:
                 for i in range(0, len(ids), 500):
                     ch = ids[i:i + 500]
                     q = ",".join("?" * len(ch))
-                    for t in ("faces", "objects", "ocr", "clip", "scenes"):
+                    for t in ("faces", "objects", "ocr", "clip", "scenes", "doctext"):
                         c.execute("DELETE FROM %s WHERE file_id IN (%s)" % (t, q), ch)
                     c.execute("UPDATE files SET " + RESET_COLS + " WHERE id IN (%s)" % q, ch)
                 c.commit()
@@ -222,12 +224,13 @@ class Scanner:
 
     @staticmethod
     def _reset_file(c, fid):
-        for t in ("faces", "objects", "ocr", "clip", "scenes"):
+        for t in ("faces", "objects", "ocr", "clip", "scenes", "doctext"):
             c.execute("DELETE FROM %s WHERE file_id=?" % t, (fid,))
 
     def _scope_rows(self, root, o, cols):
         lo, hi = prefix_range(root)
-        kinds = [k for k, opt in (("image", "images"), ("video", "videos"), ("other", "others")) if o.get(opt)]
+        kinds = [k for k, opt in (("image", "images"), ("video", "videos"), ("doc", "documents"), ("other", "others"))
+                 if o.get(opt)]
         if not kinds:
             return []
         return self.db.q("SELECT %s FROM files WHERE path >= ? AND path < ? AND size >= ? AND kind IN (%s)"
@@ -311,6 +314,68 @@ class Scanner:
         r = self.db.one("SELECT path FROM files WHERE id=?", (fid,))
         return r["path"] if r else "?"
 
+    # ------------------------------------------------------------ contenu des documents
+    def _documents(self, root, o, stats):
+        """Lit le texte des documents nouveaux ou modifiés et calcule leurs empreintes de contenu."""
+        from . import docs
+        lo, hi = prefix_range(root)
+        want_ocr = o.get("ocr", "aucun") != "aucun"
+        rows = self.db.q(
+            "SELECT f.id, f.path, f.ext, f.size, f.done_doc, d.words, d.method FROM files f "
+            "LEFT JOIN doctext d ON d.file_id=f.id WHERE f.path >= ? AND f.path < ? AND f.kind='doc' AND f.size >= ?",
+            (lo, hi, max(1, int(o.get("min_kb", 0)) * 1024)))
+        todo = [r for r in rows if not r["done_doc"] or
+                (want_ocr and r["done_doc"] == 1 and r["ext"] == ".pdf" and (r["words"] or 0) < 20
+                 and r["method"] != "erreur")]
+        stats["docs_new"] = len(todo)
+        if not todo:
+            return
+        ocrm = None
+        if want_ocr and any(r["ext"] == ".pdf" for r in todo):
+            try:
+                ocrm = self._engine(("ocr",), ocr_mod.OCR)
+            except Exception:  # noqa
+                ocrm = None
+        level = 2 if ocrm is not None else 1
+
+        def one(r):
+            if self.cancel:
+                raise Cancelled()
+            base = {"id": r["id"], "path": r["path"], "text": "", "method": "erreur", "pages": None, "title": None,
+                    "mid": None, "sender": None, "mdate": None, "extra": None, "error": None}
+            if r["size"] > docs.MAX_BYTES:
+                base["error"] = "document trop volumineux pour la lecture du contenu (comparé bit à bit seulement)"
+                return base
+            try:
+                base.update(docs.extract(r["path"], r["ext"], ocr=ocrm))
+            except docs.Unsupported as e:
+                base["error"] = str(e)
+            except OSError as e:
+                base["error"] = explain_oserror(e)
+            except Exception as e:  # noqa
+                base["error"] = "contenu illisible (%s)" % type(e).__name__
+            if not base["error"]:
+                base["chash"], base["sketch"], base["words"] = docs.fingerprint(base["text"])
+            return base
+        res = self._pool(todo, one, "Lecture du contenu des documents", "documents", stats)
+        n_text = 0
+        with self.db.wlock:
+            c = self.db.conn()
+            for d in res:
+                c.execute("DELETE FROM doctext WHERE file_id=?", (d["id"],))
+                c.execute("INSERT INTO doctext(file_id, text, chash, sketch, words, method, pages, title, mid, sender, "
+                          "mdate, extra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                          (d["id"], d["text"], d.get("chash"), d.get("sketch") or None, d.get("words") or 0,
+                           d["method"], d["pages"], d["title"], d["mid"], d["sender"], d["mdate"],
+                           json.dumps(d["extra"], ensure_ascii=False) if d["extra"] else None))
+                c.execute("UPDATE files SET done_doc=?, status='ok', error=? WHERE id=?", (level, d["error"], d["id"]))
+                if d["error"]:
+                    stats["skipped"].append({"path": d["path"], "cause": d["error"]})
+                elif d.get("words"):
+                    n_text += 1
+            c.commit()
+        stats["docs_text"] = n_text
+
     # ------------------------------------------------------------ analyse des médias
     def _analyse(self, root, o, stats):
         engine_name = o.get("face_engine", "opencv")
@@ -320,7 +385,7 @@ class Scanner:
         ocr_mode = o.get("ocr", "aucun")
         tasks = []
         for r in rows:
-            if r["kind"] == "other":
+            if r["kind"] in ("other", "doc"):
                 continue
             need = set()
             if r["kind"] == "video":
@@ -343,7 +408,7 @@ class Scanner:
                     need.add("clip")
             if need:
                 tasks.append((dict(r), need))
-        stats["to_analyse"] = len(tasks)
+        stats["to_analyse"] = len(tasks) + stats.get("docs_new", 0)
         if not tasks:
             return
 

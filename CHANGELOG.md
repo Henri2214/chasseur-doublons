@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.7.0 - 2026-11-10
+### Ajouté
+- **Dédoublonnage de tous les types de fichiers.** Nouvelle catégorie « Documents » (cochée par défaut, comme
+  « Autres ») : tout fichier est comparé bit à bit (SHA-256), et les documents le sont aussi par leur
+  **contenu** (module « Contenu des documents ») :
+  - **MÊME CONTENU** : même texte dans des fichiers différents (document ré-enregistré, .docx exporté en .pdf
+    ou .odt, .csv et .xlsx des mêmes données) ;
+  - **VERSIONS PROCHES** : versions voisines d'un même document, avec la part de texte commune à la référence
+    (seuil réglable de 50 à 95 %, 80 % par défaut) ;
+  - **MÊME COURRIEL** : même identifiant de message (.eml et .msg d'un même envoi, exports multiples). Deux
+    courriels au même texte envoyés à des dates différentes (relances) ne sont pas confondus.
+- Formats lus : Word (.docx .docm .dotx, ancien .doc), OpenDocument (.odt .ods .odp), RTF, Excel (.xlsx .xlsm,
+  ancien .xls), PowerPoint (.pptx .ppsx, ancien .ppt de façon approximative), PDF (avec **OCR des PDF
+  scannés** quand « Texte » n'est pas sur « aucun »), texte (.txt .md .csv .log .html), courriels (.eml, .msg
+  Outlook). Un fichier abîmé ou protégé par mot de passe est signalé dans le Rapport et reste comparé bit à bit.
+- **Recherche dans le contenu** (onglet Explorer) : un mot d'un document ou d'un courriel le retrouve, avec un
+  extrait ; filtre par type (PDF, Word, tableurs, présentations, courriels, texte).
+- **Aperçu des documents** : clic sur un document = son texte, l'expéditeur, la date et les pièces jointes pour
+  un courriel ; affichage du PDF ; miniature de la première page des PDF ; « Documents similaires ».
+- **Bouton « Quitter »** (en haut à droite) : arrête complètement l'application — analyse en cours, serveur et
+  processus — pour que rien ne tourne en arrière-plan une fois le travail terminé. Route `/api/quit`.
+### Modifié
+- Index : nouvelle table `doctext` (+ recherche plein texte) ; les index existants sont mis à niveau
+  automatiquement, sans nouvelle analyse des photos.
+- Un fichier qui n'est ni image ni vidéo n'est jamais affiché dans la page : il est proposé en téléchargement
+  (un .html ouvert depuis l'application aurait pu piloter l'interface).
+- Dépendances : `pypdfium2` et `olefile` (installées automatiquement par `lancer.bat` / `lancer.sh`, incluses
+  dans l'exécutable).
+### Limites connues
+- Archives de messagerie (.pst, .ost, .mbox) et archives (.zip, .7z) : comparées bit à bit seulement, leur
+  contenu n'est pas ouvert. Anciens .ppt : texte approximatif. Au-delà de 200 Mo, un document n'est comparé
+  que bit à bit.
+
 ## 2.6.0 - 2026-11-10
 ### Ajouté
 - **Application autonome Windows** : `tools/construire.ps1` produit `dist\ChasseurDoublons\ChasseurDoublons.exe`

@@ -250,7 +250,8 @@ def compute(db, roots, opts, progress=None):
     """Calcule les groupes de doublons pour les fichiers indexés sous `roots`."""
     P = rigor_params(db, opts.get("rigor", "strict"))
     use_exif = bool(opts.get("exif", True))
-    kinds = [k for k, o in (("image", "images"), ("video", "videos"), ("other", "others")) if opts.get(o, k != "other")]
+    kinds = [k for k, o in (("image", "images"), ("video", "videos"), ("doc", "documents"), ("other", "others"))
+             if opts.get(o, k != "other")]
     min_size = max(1, int(opts.get("min_kb", 0)) * 1024)
     rows = []
     for root in roots:
@@ -280,6 +281,7 @@ def compute(db, roots, opts, progress=None):
 
     adj = defaultdict(dict)
     nodate = set()
+    doc_groups = []
 
     def link(a, b, s, dated=True):
         adj[a][b] = s
@@ -342,6 +344,16 @@ def compute(db, roots, opts, progress=None):
                 for j in np.nonzero(mask)[0]:
                     link(vidx[a], vidx[a + 1 + j], 100.0 * (1 - float(d[j]) / 64.0))
 
+    # ---- documents : même courriel, même texte, versions proches
+    if opts.get("doc_content", True) and "doc" in kinds:
+        from . import docs
+        drep = {reps[k][0]: k for k, g in enumerate(reps) if F[g[0]]["kind"] == "doc"}
+        if len(drep) >= 2:
+            if progress:
+                progress("Comparaison du contenu des documents")
+            thr = max(0.3, min(0.99, float(opts.get("doc_thr", 0.8))))
+            doc_groups = [(kind, [(drep[i], s_) for i, s_ in mem]) for kind, mem in docs.groups(db, list(drep), thr, progress)]
+
     if opts.get("clip_dupes"):
         _clip_links(db, reps, F, P, use_exif, float(opts.get("clip_thr", 0.96)), link)
 
@@ -363,6 +375,12 @@ def compute(db, roots, opts, progress=None):
         groups.append({"id": len(groups) + 1, "kind": "visuel", "media": F[reps[a][0]]["kind"], "members": ml,
                        "nodate": any(k in nodate for k in ks)})
         used.update(ks)
+    for gk, mem in doc_groups:
+        ml = []
+        for n, (k, s_) in enumerate(mem):
+            ml += [member(f, k, s_, n == 0 and j == 0) for j, f in enumerate(reps[k])]
+        groups.append({"id": len(groups) + 1, "kind": gk, "media": "doc", "members": ml, "nodate": False})
+        used.update(k for k, _ in mem)
     for k, g in enumerate(reps):
         if len(g) > 1 and k not in used:
             groups.append({"id": len(groups) + 1, "kind": "exact", "media": F[g[0]]["kind"], "nodate": False,
@@ -469,6 +487,10 @@ def page(db, result, page_no=1, per=20, sort="waste", kind="all"):
         for r in db.q("SELECT id, path, name, size, mtime, taken, kind, w, h, dur, blur FROM files WHERE id IN (%s)"
                       % ",".join("?" * len(ch)), ch):
             info[r["id"]] = dict(r)
+        for r in db.q("SELECT file_id, words, method, pages, title, sender, mdate FROM doctext WHERE file_id IN (%s)"
+                      % ",".join("?" * len(ch)), ch):
+            if r["file_id"] in info:
+                info[r["file_id"]].update({k: r[k] for k in r.keys() if k != "file_id"})
     out = []
     for g in sl:
         files = []

@@ -55,7 +55,7 @@ def main():
     # ---- dépendances
     for mod, label, required in (("flask", "Flask", True), ("PIL", "Pillow", True), ("numpy", "numpy", True),
                                  ("cv2", "OpenCV (vidéos, visages)", True), ("onnxruntime", "onnxruntime", False),
-                                 ("pillow_heif", "pillow-heif (HEIC, AVIF)", False), ("rawpy", "rawpy (photos RAW)", False), ("tokenizers", "tokenizers (CLIP)", False),
+                                 ("pillow_heif", "pillow-heif (HEIC, AVIF)", False), ("pypdfium2", "pypdfium2 (texte et miniatures des PDF)", False), ("olefile", "olefile (.doc, .xls, .msg)", False), ("rawpy", "rawpy (photos RAW)", False), ("tokenizers", "tokenizers (CLIP)", False),
                                  ("rapidocr_onnxruntime", "rapidocr (OCR)", False)):
         try:
             importlib.import_module(mod)

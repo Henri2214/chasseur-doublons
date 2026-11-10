@@ -12,7 +12,7 @@ import unicodedata
 import numpy as np
 
 from .clip import SCENES
-from .config import BLUR_GLOBAL_MIN
+from .config import BLUR_GLOBAL_MIN, DOC_FAMILIES
 from .objects import COCO_EN, COCO_FR
 
 GLOSSARY = {
@@ -94,9 +94,13 @@ CLIP_INDEX = ClipIndex()
 def search(db, q="", filters=None, page=1, per=60, clip_model=None, ids_only=False):
     f = filters or {}
     where, args = ["f.status='ok'"], []
-    if f.get("kind") in ("image", "video", "other"):
+    if f.get("kind") in ("image", "video", "doc", "other"):
         where.append("f.kind=?")
         args.append(f["kind"])
+    elif f.get("kind") in DOC_FAMILIES:               # famille de documents : pdf, word, tableur, mail...
+        ex = sorted(DOC_FAMILIES[f["kind"]])
+        where.append("f.ext IN (%s)" % ",".join("?" * len(ex)))
+        args += ex
     if f.get("folder"):
         r = os.path.abspath(f["folder"]).rstrip("\\/") + os.sep
         where.append("f.path >= ? AND f.path < ?")
@@ -178,6 +182,17 @@ def search(db, q="", filters=None, page=1, per=60, clip_model=None, ids_only=Fal
             cond = " AND ".join("text LIKE ?" for _ in words)
             bump([r["file_id"] for r in db.q("SELECT file_id FROM ocr WHERE " + cond, ["%" + w + "%" for w in words])],
                  0.95, "texte")
+        # contenu des documents (Word, PDF, courriels...)
+        if db.fts:
+            try:
+                bump([r["rowid"] for r in db.q("SELECT rowid FROM doc_fts WHERE doc_fts MATCH ? LIMIT 20000", (expr,))],
+                     0.97, "contenu des documents")
+            except Exception:
+                pass
+        else:
+            cond = " AND ".join("text LIKE ?" for _ in words)
+            bump([r["file_id"] for r in db.q("SELECT file_id FROM doctext WHERE " + cond,
+                                             ["%" + w + "%" for w in words])], 0.97, "contenu des documents")
         # noms de fichiers
         cond = " AND ".join("f.name LIKE ?" for _ in words)
         bump([r["id"] for r in db.q("SELECT f.id FROM files f WHERE " + W + " AND " + cond,
@@ -208,15 +223,22 @@ def search(db, q="", filters=None, page=1, per=60, clip_model=None, ids_only=Fal
     if ids_only:
         return {"ids": order}
     sl_ids = order[(page - 1) * per: page * per]
-    return _hydrate(db, sl_ids, total, page, per, score, used)
+    return _hydrate(db, sl_ids, total, page, per, score, used, words)
 
 
-def _hydrate(db, ids, total, page, per, score, used):
+def _hydrate(db, ids, total, page, per, score, used, words=()):
     rows = {}
     if ids:
         for r in db.q("SELECT id, path, name, size, mtime, taken, kind, w, h, dur, blur FROM files WHERE id IN (%s)"
                       % ",".join("?" * len(ids)), ids):
             rows[r["id"]] = dict(r)
+    if ids:
+        from .docs import snippet
+        for r in db.q("SELECT file_id, substr(text, 1, 200000) t, words, method, title, sender, mdate, pages "
+                      "FROM doctext WHERE file_id IN (%s)" % ",".join("?" * len(ids)), ids):
+            if r["file_id"] in rows:
+                rows[r["file_id"]].update(snippet=snippet(r["t"] or "", words), words=r["words"], method=r["method"],
+                                          title=r["title"], sender=r["sender"], mdate=r["mdate"], pages=r["pages"])
     out = []
     for i in ids:
         if i in rows:

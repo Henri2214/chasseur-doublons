@@ -23,7 +23,7 @@ PH_MAX = 26            # distance pHash maximale pour être candidat à la compa
 CANDIDATES_MAX = 900   # nombre de candidats visuels comparés finement
 CLIP_LOW, CLIP_HIGH = 0.62, 0.96    # cosinus CLIP image-image : 0,62 = sans rapport, 0,96 = même scène
 LABELS = {"visuel": "empreinte visuelle", "personne": "mêmes personnes", "objet": "mêmes objets",
-          "clip": "même contenu (IA)"}
+          "clip": "même contenu (IA)", "contenu": "texte en commun"}
 
 
 def _c01(x):
@@ -48,6 +48,9 @@ def similar(db, file_id, thr=0.55, sources=None, limit=5000):
     ref = db.one("SELECT id, kind, phash FROM files WHERE id=?", (file_id,))
     if not ref:
         raise ValueError("Photo introuvable dans l'index.")
+    if ref["kind"] == "doc":          # document : ressemblance du texte (suites de mots communes)
+        from .docs import similar_docs
+        return [(i, n, ["contenu"]) for i, n in similar_docs(db, file_id, min(thr, 0.9) * 0.6, limit)]
     on = set(sources or ("visuel", "personne", "objet", "clip"))
     comp = {}
 

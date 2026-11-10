@@ -5,7 +5,7 @@ import threading
 
 import numpy as np
 
-from .config import IMG_EXT, VID_EXT
+from .config import DOC_EXT, IMG_EXT, VID_EXT
 
 IS_WIN = os.name == "nt"
 
@@ -42,7 +42,7 @@ def norm(p):
 
 def kind_of(name):
     ext = os.path.splitext(name)[1].lower()
-    return "image" if ext in IMG_EXT else "video" if ext in VID_EXT else "other"
+    return "image" if ext in IMG_EXT else "video" if ext in VID_EXT else "doc" if ext in DOC_EXT else "other"
 
 
 def is_cloud_placeholder(st):

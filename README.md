@@ -177,6 +177,32 @@ sont reconnus comme doublons. Les formats que le navigateur ne sait pas afficher
 convertis en JPEG (mis en cache) pour l'aperçu plein écran. Si `pillow-heif` ou `rawpy` manque, le rapport
 indique la cause exacte du fichier ignoré.
 
+## Documents, courriels et autres fichiers
+
+Tous les fichiers peuvent être dédoublonnés. Cochez « Documents » et « Autres » (cochés par défaut) :
+
+| Badge | Signification | Fiabilité |
+|---|---|---|
+| IDENTIQUES | mêmes octets (SHA-256), n'importe quel type de fichier | certaine |
+| MÊME CONTENU | même texte dans des fichiers différents : document ré-enregistré, .docx exporté en .pdf / .odt | texte identique, mise en forme et images non comparées |
+| MÊME COURRIEL | même identifiant de message (.eml / .msg, exports multiples) | certaine pour le message, pièces jointes non comparées |
+| VERSIONS PROCHES | part du texte commune ≥ seuil (80 % par défaut, réglable) | à relire avant de supprimer |
+
+Formats dont le contenu est lu : Word (.docx, .docm, .dotx, .doc), OpenDocument (.odt, .ods, .odp), RTF, Excel
+(.xlsx, .xlsm, .xls), PowerPoint (.pptx, .ppsx, .ppt approximatif), PDF (OCR des PDF scannés si « Texte » n'est
+pas sur « aucun »), texte (.txt, .md, .csv, .log, .html), courriels (.eml, .msg). Tous les autres fichiers
+(archives, .pst, .mbox, musique, programmes…) sont comparés bit à bit.
+
+Le texte est indexé : l'onglet **Explorer** retrouve un document ou un courriel par un mot de son contenu.
+Un clic sur un document affiche son texte ; « Similaires » liste les documents au texte voisin.
+« MÊME CONTENU » compare le texte seul : deux documents au même texte mais aux images différentes sont
+regroupés. Vérifiez avant de supprimer.
+
+## Quitter
+
+Le bouton **⏻ Quitter** (en haut à droite) arrête complètement l'application : l'analyse en cours est
+interrompue, le serveur local et tous ses processus s'arrêtent. Fermer l'onglet du navigateur ne suffit pas.
+
 ## Sécurité des actions
 - La suppression est **définitive**, sans corbeille (choix assumé).
 - Juste avant de supprimer, la taille et la date de modification sont revérifiées. Si le fichier a changé,
@@ -296,6 +322,9 @@ CD_MODELS_DIR=models CD_TEST_IMAGES=dossier_portraits python -m pytest tests/tes
 - **Version non quantifiée de CLIP** : non prévue ; seuls les modèles `_quantized` sont gérés.
 
 ## Limites connues
+- Documents : seul le texte est comparé (pas la mise en forme ni les images). Le contenu des archives
+  (.zip, .pst, .mbox) n'est pas ouvert. Lecture des .msg, des anciens .xls et des PDF testée sur peu de
+  fichiers réels ; anciens .ppt : texte approximatif.
 - Les vidéos n'ont que la signature visuelle : pas de visages, d'objets ni de CLIP sur les vidéos.
 - CLIP ne comprend que l'anglais. Les mots français courants (objets, scènes, glossaire d'une centaine de
   mots) sont traduits ; une requête plus libre en français donne des résultats moins pertinents.

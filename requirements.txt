@@ -6,6 +6,9 @@ opencv-python-headless>=4.8
 onnxruntime>=1.16
 # Photos iPhone et formats modernes (HEIC, HEIF, AVIF)
 pillow-heif
+# Documents : texte et miniatures des PDF ; anciens formats Office (.doc, .xls) et courriels Outlook (.msg)
+pypdfium2>=4.20
+olefile>=0.46
 # Texte dans les images (OCR) : modèles inclus dans le paquet.
 # Dernière version publiée : 1.2.3, uniquement pour Python <= 3.12 ; au-delà, pip ignore simplement la ligne.
 rapidocr-onnxruntime>=1.2.3; python_version < "3.13"

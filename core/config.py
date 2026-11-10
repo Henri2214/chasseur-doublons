@@ -41,6 +41,16 @@ IMG_EXT = ({".jpg", ".jpeg", ".jpe", ".png", ".gif", ".bmp", ".webp", ".tif", ".
             ".tga", ".ico", ".ppm", ".pgm"} | HEIF_EXT | RAW_EXT)
 VID_EXT = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg",
            ".3gp", ".mts", ".m2ts", ".ts"}
+# Documents dont le CONTENU est lu et comparé (les autres fichiers ne sont comparés que bit à bit).
+DOC_FAMILIES = {
+    "word": {".docx", ".docm", ".dotx", ".dotm", ".doc", ".dot", ".odt", ".rtf"},
+    "pdf": {".pdf"},
+    "tableur": {".xlsx", ".xlsm", ".xltx", ".xls", ".ods", ".csv"},
+    "presentation": {".pptx", ".ppsx", ".pptm", ".potx", ".ppt", ".pps", ".odp"},
+    "texte": {".txt", ".md", ".log", ".htm", ".html"},
+    "mail": {".eml", ".msg"},
+}
+DOC_EXT = set().union(*DOC_FAMILIES.values())
 
 # Taille de décodage unique d'une image (côté max). Toutes les étapes partent de cette image.
 DECODE_MAX = 1280

@@ -6,6 +6,7 @@ indexés et dans le périmètre de la session.
 """
 import hashlib
 import importlib.util
+import json
 import os
 import string
 import threading
@@ -14,7 +15,7 @@ import time
 from flask import Flask, Response, abort, jsonify, request, send_file
 from PIL import Image, ImageOps
 
-from . import __version__, actions, calib, dupes, persons, search, similar
+from . import __version__, actions, calib, docs, dupes, persons, search, similar
 from .config import DATA_DIR, IMG_EXT, RIGOR_LABELS, WEB_EXT
 from .db import Database
 from .imaging import HEIF, RAW, cv2, load_small
@@ -115,7 +116,7 @@ def create_app(state=None):
     def caps():
         st = S.mm.status()
         return {
-            "video": cv2 is not None, "heif": HEIF, "raw": RAW,
+            "video": cv2 is not None, "heif": HEIF, "raw": RAW, "pdf": docs.PDF, "ole": docs.OLE,
             "faces_insightface": st["insightface"]["available"], "faces_opencv": st["opencv_faces"]["available"],
             "objects": st["yolox_s"]["available"] or st["yolox_nano"]["available"],
             "clip": st["clip"]["available"] and importlib.util.find_spec("tokenizers") is not None,
@@ -213,6 +214,24 @@ def create_app(state=None):
             return err(str(e), 409)
         return jsonify(ok=True)
 
+    @app.post("/api/quit")
+    def api_quit():
+        """Arrête complètement l'application (serveur, analyse en cours, processus auxiliaires)."""
+        S.scanner.cancel = True
+
+        def stop():
+            t0 = time.time()
+            while S.scanner.state["status"] == "running" and time.time() - t0 < 8:
+                time.sleep(0.1)
+            try:
+                S.db.conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:  # noqa
+                pass
+            time.sleep(0.3)                # laisse partir la réponse HTTP
+            app.config.get("EXIT", os._exit)(0)
+        threading.Thread(target=stop, daemon=True).start()
+        return jsonify(ok=True)
+
     @app.post("/api/cancel")
     def api_cancel():
         S.scanner.cancel = True
@@ -227,7 +246,8 @@ def create_app(state=None):
                        elapsed=round(end - st["started"], 1) if st["started"] else 0,
                        dupes=S.dupe_state, has_results=bool(S.result.groups),
                        summary={k: (st.get("stats") or {}).get(k) for k in
-                                ("files", "new", "changed", "unchanged", "removed", "to_analyse")})
+                                ("files", "new", "changed", "unchanged", "removed", "to_analyse", "docs_new",
+                                 "docs_text")})
 
     @app.get("/api/report")
     def api_report():
@@ -327,7 +347,13 @@ def create_app(state=None):
         ext = os.path.splitext(r["path"])[1].lower()
         if r["kind"] == "image" and ext not in WEB_EXT:
             return converted_jpeg(r, 2560)        # HEIC, AVIF, TIFF, RAW... : le navigateur ne sait pas les afficher
-        return send_file(lp(r["path"]), conditional=True)
+        if r["kind"] in ("image", "video"):
+            return send_file(lp(r["path"]), conditional=True)
+        if ext == ".pdf":
+            return send_file(lp(r["path"]), conditional=True, mimetype="application/pdf")
+        # tout autre fichier est proposé en téléchargement : un .html affiché ici pourrait piloter l'interface
+        return send_file(lp(r["path"]), as_attachment=True, download_name=os.path.basename(r["path"]),
+                         mimetype="application/octet-stream")
 
     def converted_jpeg(r, s):
         key = hashlib.sha1(("%s|%s|%s|%s" % (norm(r["path"]), r["mtime"], r["size"], s)).encode()).hexdigest()
@@ -340,6 +366,21 @@ def create_app(state=None):
             im.save(cf + ".tmp", "JPEG", quality=90)
             os.replace(cf + ".tmp", cf)
         return send_file(cf, mimetype="image/jpeg", max_age=86400)
+
+    def pdf_page(path, s):
+        """Première page d'un PDF, pour la miniature."""
+        try:
+            with docs._PDF_LOCK:
+                pdf = docs.pdfium.PdfDocument(lp(path))
+                try:
+                    page = pdf[0]
+                    im = page.render(scale=s / max(page.get_width(), page.get_height(), 1.0)).to_pil().convert("RGB")
+                    page.close()
+                finally:
+                    pdf.close()
+            return im
+        except Exception:  # noqa
+            return None
 
     def placeholder(label):
         svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#2a3040"/>'
@@ -354,12 +395,12 @@ def create_app(state=None):
             return placeholder("absent")       # jamais de vignette cassée dans la grille
         s = max(64, min(int(request.args.get("s", 320)), 800))
         ext = os.path.splitext(r["path"])[1].lower()
-        if r["kind"] == "other":
+        if r["kind"] == "other" or (r["kind"] == "doc" and (ext != ".pdf" or not docs.PDF)):
             return placeholder(ext.lstrip(".") or "fichier")
         key = hashlib.sha1(("%s|%s|%s|%s" % (norm(r["path"]), r["mtime"], r["size"], s)).encode()).hexdigest()
         cf = os.path.join(S.thumbs, key[:2], key + ".jpg")
         if not os.path.exists(cf):
-            im = load_small(r["path"], r["kind"], s)
+            im = pdf_page(r["path"], s) if r["kind"] == "doc" else load_small(r["path"], r["kind"], s)
             if im is None:
                 return placeholder(ext.lstrip("."))
             os.makedirs(os.path.dirname(cf), exist_ok=True)
@@ -400,7 +441,23 @@ def create_app(state=None):
                                                        "WHERE f.file_id=?", (fid,))],
                        objects=[dict(x) for x in S.db.q("SELECT label, score FROM objects WHERE file_id=? ORDER BY score DESC", (fid,))],
                        scenes=[dict(x) for x in S.db.q("SELECT label, score FROM scenes WHERE file_id=?", (fid,))],
-                       ocr=(S.db.one("SELECT text FROM ocr WHERE file_id=?", (fid,)) or {"text": ""})["text"])
+                       ocr=(S.db.one("SELECT text FROM ocr WHERE file_id=?", (fid,)) or {"text": ""})["text"],
+                       doc=doc_info(fid, r["path"]) if r["kind"] == "doc" else None)
+
+    def doc_info(fid, path):
+        d = S.db.one("SELECT substr(text, 1, 60000) text, length(text) chars, words, method, pages, title, sender, "
+                     "mdate, extra FROM doctext WHERE file_id=?", (fid,))
+        fam = docs.FAMILY_LABELS.get(docs.family(os.path.splitext(path)[1]), "Document")
+        if not d:
+            return {"family": fam, "text": "", "words": 0, "method": None}
+        out = dict(d, family=fam)
+        try:
+            out["extra"] = json.loads(d["extra"]) if d["extra"] else None
+        except ValueError:
+            out["extra"] = None
+        err_ = S.db.one("SELECT error FROM files WHERE id=?", (fid,))
+        out["error"] = err_["error"] if err_ else None
+        return out
 
     # ------------------------------------------------------------ navigation dossiers
     @app.get("/api/ls")

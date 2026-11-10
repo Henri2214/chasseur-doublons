@@ -11,7 +11,7 @@ import time
 
 import numpy as np
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
@@ -84,6 +84,21 @@ CREATE TABLE IF NOT EXISTS ocr (
   text TEXT
 );
 
+CREATE TABLE IF NOT EXISTS doctext (
+  file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+  text TEXT,                      -- texte extrait (tronqué à 1 million de caractères)
+  chash TEXT,                     -- empreinte du texte normalisé (même contenu, autre fichier)
+  sketch BLOB,                    -- échantillon de suites de 3 mots (versions proches)
+  words INTEGER,
+  method TEXT,                    -- texte / ocr / approx / erreur
+  pages INTEGER,
+  title TEXT,
+  mid TEXT, sender TEXT, mdate REAL,   -- courriels : Message-ID, expéditeur, date d'envoi
+  extra TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_doctext_chash ON doctext(chash);
+CREATE INDEX IF NOT EXISTS ix_doctext_mid ON doctext(mid);
+
 CREATE TABLE IF NOT EXISTS clip (
   file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
   emb BLOB NOT NULL               -- float16 normalisé (512)
@@ -135,6 +150,7 @@ class Database:
         with self.wlock:
             c.executescript(SCHEMA)
             c.execute("INSERT OR IGNORE INTO meta(k, v) VALUES ('schema', ?)", (str(SCHEMA_VERSION),))
+            self._migrate(c)
             c.commit()
         self.fts = self._init_fts()
 
@@ -150,10 +166,32 @@ class Database:
             self._local.c = c
         return c
 
+    @staticmethod
+    def _migrate(c):
+        """Mise à niveau d'un index créé par une version précédente (aucune donnée perdue)."""
+        from .config import DOC_EXT
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(files)")}
+        if "done_doc" not in cols:
+            c.execute("ALTER TABLE files ADD COLUMN done_doc INTEGER DEFAULT 0")
+        ext = sorted(DOC_EXT)
+        c.execute("UPDATE files SET kind='doc' WHERE kind='other' AND ext IN (%s)" % ",".join("?" * len(ext)), ext)
+        c.execute("UPDATE meta SET v=? WHERE k='schema'", (str(SCHEMA_VERSION),))
+
     def _init_fts(self):
         c = self.conn()
         try:
             with self.wlock:
+                c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(text, content='doctext', "
+                          "content_rowid='file_id', tokenize='unicode61 remove_diacritics 2')")
+                c.executescript("""
+                CREATE TRIGGER IF NOT EXISTS doc_ai AFTER INSERT ON doctext BEGIN
+                  INSERT INTO doc_fts(rowid, text) VALUES (new.file_id, new.text); END;
+                CREATE TRIGGER IF NOT EXISTS doc_ad AFTER DELETE ON doctext BEGIN
+                  INSERT INTO doc_fts(doc_fts, rowid, text) VALUES ('delete', old.file_id, old.text); END;
+                CREATE TRIGGER IF NOT EXISTS doc_au AFTER UPDATE ON doctext BEGIN
+                  INSERT INTO doc_fts(doc_fts, rowid, text) VALUES ('delete', old.file_id, old.text);
+                  INSERT INTO doc_fts(rowid, text) VALUES (new.file_id, new.text); END;
+                """)
                 c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS ocr_fts USING fts5(text, content='ocr', "
                           "content_rowid='file_id', tokenize='unicode61 remove_diacritics 2')")
                 c.executescript("""
