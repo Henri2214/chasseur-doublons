@@ -69,7 +69,7 @@ if (-not $SansModeles) {
         New-Item -ItemType Directory -Force -Path $dest | Out-Null
         robocopy models $dest /E /NFL /NDL /NJH /NJS /NP /XF $interdits "*.part" "*.zip" | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "Copie des modeles impossible" }
-        $LASTEXITCODE = 0
+        $global:LASTEXITCODE = 0      # robocopy renvoie 1 quand il a copié des fichiers : ce n'est pas une erreur
         Write-Host "   modeles copies : $((Get-ChildItem $dest -Recurse -File | Measure-Object Length -Sum).Sum / 1MB -as [int]) Mo (InsightFace exclu)"
     } else {
         Write-Host "   pas de dossier models\ : les modeles seront telecharges au premier lancement" -ForegroundColor DarkYellow
@@ -107,3 +107,4 @@ $mo = [math]::Round((Get-Item $zip).Length / 1MB)
 Write-Host ""
 Write-Host "Termine : $zip ($mo Mo)" -ForegroundColor Green
 Write-Host "Essai   : dist\ChasseurDoublons\ChasseurDoublons.exe"
+exit 0
