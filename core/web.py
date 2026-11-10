@@ -41,6 +41,7 @@ class State:
         self.mm.gpu_note = self.db.get_setting("gpu_note", "") if not self.mm.use_gpu() else ""
         self.scanner = Scanner(self.db, self.mm)
         self.scope = Scope()
+        self.scope.reset(self.known_roots())     # les dossiers déjà analysés restent consultables
         self.result = dupes.DupeResult()
         self.thumbs = os.path.join(self.data_dir, "miniatures")
         os.makedirs(self.thumbs, exist_ok=True)
@@ -54,6 +55,20 @@ class State:
         self.last_seen = time.time()  # dernière requête reçue (arrêt automatique quand la page est fermée)
         self.zone_cache = {}          # (photo, zone) -> signature de la zone tracée
         self.psearch_refs = {}        # jeton -> {"engine": str, "embs": [vecteurs]} (photos de référence envoyées)
+
+    def known_roots(self):
+        """Dossiers déjà analysés avec cet outil et toujours présents : c'est le périmètre autorisé.
+
+        L'index garde les visages, les objets et le texte de tous ces dossiers ; sans eux dans le périmètre,
+        l'onglet Personnes afficherait des vignettes vides pour tout ce qui vient d'une analyse précédente."""
+        out = []
+        try:
+            for r in self.db.q("SELECT root, MAX(id) m FROM scans WHERE root IS NOT NULL GROUP BY root ORDER BY m DESC"):
+                if r["root"] and os.path.isdir(lp(r["root"])):
+                    out.append(r["root"])
+        except Exception:  # noqa
+            pass
+        return out[:200]
 
     def face_engine(self, name):
         """Moteur de visages (chargé une fois) ; lève RuntimeError si le modèle manque."""
@@ -213,7 +228,7 @@ def create_app(state=None):
         if opts.get("face_engine") == "insightface" and not S.mm.license_ok("insightface"):
             return err("Confirmez la licence InsightFace (onglet Réglages) ou choisissez le moteur OpenCV.", 409)
         try:
-            S.scope.reset([root])          # périmètre remis à zéro à chaque session d'analyse
+            S.scope.reset([root] + S.known_roots())   # le dossier analysé + ceux des analyses précédentes
             S.result.set([], {})
             S.last_opts = dict(opts, root=root)
             S.scanner.start(root, opts)
@@ -419,14 +434,14 @@ def create_app(state=None):
     def api_facethumb():
         fid = int(request.args.get("id", 0))
         f = S.db.one("SELECT f.*, x.path, x.mtime FROM faces f JOIN files x ON x.id=f.file_id WHERE f.id=?", (fid,))
-        if not f or not S.scope.contains(f["path"]):
-            abort(404)
+        if not f or not S.scope.contains(f["path"]) or not os.path.isfile(lp(f["path"])):
+            return placeholder("?")            # photo disparue ou hors des dossiers analysés : pas d'image cassée
         key = hashlib.sha1(("F|%d|%s|%s" % (fid, norm(f["path"]), f["mtime"])).encode()).hexdigest()
         cf = os.path.join(S.thumbs, "visages", key + ".jpg")
         if not os.path.exists(cf):
             im = load_small(f["path"], "image", 1280)
             if im is None:
-                abort(404)
+                return placeholder("?")
             W, H = im.size
             x1, y1, x2, y2 = f["x1"] * W, f["y1"] * H, f["x2"] * W, f["y2"] * H
             m = 0.25 * max(x2 - x1, y2 - y1)
@@ -625,7 +640,7 @@ def create_app(state=None):
     @app.get("/api/search")
     def api_search():
         a = request.args
-        filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to")
+        filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to", "sort")
                    if a.get(k)}
         res = search.search(S.db, a.get("q", ""), filters, int(a.get("page", 1)), min(1000, int(a.get("per", 60))),
                             S.clip() if a.get("q") else None)
@@ -646,7 +661,7 @@ def create_app(state=None):
     def api_search_ids():
         """Identifiants de TOUS les résultats d'une recherche (bouton « Tout sélectionner »), sans pagination."""
         a = request.args
-        filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to")
+        filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to", "sort")
                    if a.get(k)}
         res = search.search(S.db, a.get("q", ""), filters, 1, 1, S.clip() if a.get("q") else None, ids_only=True)
         ids = in_scope_ids(res["ids"])

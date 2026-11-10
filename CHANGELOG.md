@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.8.1 - 2026-11-10
+### Corrigé
+- **Onglet Personnes : vignettes de visages vides.** L'index garde les visages de tous les dossiers déjà
+  analysés, mais seules les photos du dernier dossier analysé pouvaient être affichées. Les dossiers des
+  analyses précédentes (encore présents sur le disque) restent maintenant consultables, y compris après un
+  redémarrage : plus besoin de relancer une analyse pour revoir ses personnes ou ses recherches. Une photo
+  disparue affiche une vignette neutre au lieu d'une image cassée.
+### Ajouté
+- **Onglet Explorer** (il retrouve son nom) : panneau « Tout ce qui a été trouvé » — types de fichiers,
+  familles de documents, personnes, objets, scènes, photos floues, chacun avec son nombre. Un clic sur une
+  étiquette liste les fichiers correspondants ; un second clic retire le filtre ; « Tout afficher » remet à zéro.
+- Explorer : **tri** (plus récents, plus anciens, plus gros, plus petits, nom, dossier, type), **vue en liste**
+  ou en vignettes, nombre de fichiers de la liste, et les « autres fichiers » y figurent désormais.
+
 ## 2.8.0 - 2026-11-10
 ### Ajouté
 - **Interface repensée, claire par défaut.** Thème clair (bouton « Sombre / Clair » en haut à droite, choix

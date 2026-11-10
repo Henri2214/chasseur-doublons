@@ -283,3 +283,38 @@ def test_api_documents_et_quitter(dossier, state):
             break
         time.sleep(0.05)
     assert sorties == [0]
+
+
+def test_explorer_tri_facettes_et_autres_fichiers(dossier, state):
+    state.scanner.scan_sync(str(dossier), {"others": True})
+    tout = search.search(state.db, "", {"sort": "gros"}, per=100)["files"]
+    assert {"a.bin", "b.dat"} <= {f["name"] for f in tout}                 # les « autres » fichiers sont listés
+    assert [f["size"] for f in tout] == sorted((f["size"] for f in tout), reverse=True)
+    noms = [f["name"] for f in search.search(state.db, "", {"sort": "nom"}, per=100)["files"]]
+    assert noms == sorted(noms, key=str.lower)
+    r = search.search(state.db, "contrat", {"sort": "petit"})["files"]     # recherche + tri demandé
+    assert len(r) >= 4 and [f["size"] for f in r] == sorted(f["size"] for f in r)
+    fa = search.facets(state.db)
+    assert fa["kinds"] == {"doc": 11, "other": 2} and fa["families"]["mail"] == 3 and fa["families"]["word"] == 7
+
+
+def test_dossiers_deja_analyses_restent_consultables(dossier, tmp_path):
+    """Après un redémarrage (ou l'analyse d'un autre dossier), les fichiers déjà indexés restent affichables."""
+    from core.web import State
+    data = str(tmp_path / "data")
+    s1 = State(data_dir=data, models_dir=str(tmp_path / "m"))
+    s1.scanner.scan_sync(str(dossier))
+    s2 = State(data_dir=data, models_dir=str(tmp_path / "m"))               # nouveau lancement
+    assert s2.scope.contains(str(dossier / "contrat.docx"))
+    assert not s2.scope.contains(str(tmp_path / "ailleurs" / "x.docx"))
+    app = create_app(s2)
+    app.testing = True
+    c = app.test_client()
+    c.environ_base["HTTP_HOST"] = "127.0.0.1:8765"
+    assert len(c.get("/api/search?kind=mail").get_json()["files"]) == 3
+    assert c.get("/api/facethumb?id=999").mimetype == "image/svg+xml"       # jamais d'image cassée
+    autre = tmp_path / "autre"
+    autre.mkdir()
+    (autre / "note.txt").write_text("bonjour tout le monde")
+    assert c.post("/api/scan", json={"path": str(autre)}, headers={"X-Token": s2.token}).status_code == 200
+    assert s2.scope.contains(str(dossier / "contrat.docx")) and s2.scope.contains(str(autre / "note.txt"))

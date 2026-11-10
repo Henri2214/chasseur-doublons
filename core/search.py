@@ -89,11 +89,19 @@ class ClipIndex:
 
 
 CLIP_INDEX = ClipIndex()
+SORTS = {
+    "": "COALESCE(f.taken, f.mtime) DESC",
+    "recent": "COALESCE(f.taken, f.mtime) DESC", "ancien": "COALESCE(f.taken, f.mtime) ASC",
+    "gros": "f.size DESC", "petit": "f.size ASC",
+    "nom": "f.name COLLATE NOCASE ASC", "dossier": "f.folder COLLATE NOCASE ASC, f.name COLLATE NOCASE ASC",
+    "type": "f.ext ASC, f.name COLLATE NOCASE ASC",
+}
 
 
 def search(db, q="", filters=None, page=1, per=60, clip_model=None, ids_only=False):
     f = filters or {}
-    where, args = ["f.status='ok'"], []
+    where, args = ["(f.status='ok' OR f.kind='other')"], []
+    order = SORTS.get(f.get("sort") or "", SORTS[""])
     if f.get("kind") in ("image", "video", "doc", "other"):
         where.append("f.kind=?")
         args.append(f["kind"])
@@ -132,10 +140,9 @@ def search(db, q="", filters=None, page=1, per=60, clip_model=None, ids_only=Fal
     used = []
     if not q:
         if ids_only:
-            return {"ids": [r["id"] for r in db.q("SELECT f.id FROM files f WHERE " + W +
-                                                  " ORDER BY COALESCE(f.taken, f.mtime) DESC", args)]}
+            return {"ids": [r["id"] for r in db.q("SELECT f.id FROM files f WHERE " + W + " ORDER BY " + order, args)]}
         total = db.one("SELECT COUNT(*) n FROM files f WHERE " + W, args)["n"]
-        rows = db.q("SELECT f.id FROM files f WHERE " + W + " ORDER BY COALESCE(f.taken, f.mtime) DESC LIMIT ? OFFSET ?",
+        rows = db.q("SELECT f.id FROM files f WHERE " + W + " ORDER BY " + order + " LIMIT ? OFFSET ?",
                     (*args, per, (page - 1) * per))
         return _hydrate(db, [r["id"] for r in rows], total, page, per, {}, used)
 
@@ -218,11 +225,15 @@ def search(db, q="", filters=None, page=1, per=60, clip_model=None, ids_only=Fal
                     if i in allowed:
                         score[i] = 0.3 + 4.0 * (s - 0.18)
                 used.append("CLIP")
-    order = sorted(score, key=lambda i: -score[i])
-    total = len(order)
+    if f.get("sort") in SORTS and f.get("sort"):      # tri demandé : il remplace l'ordre de pertinence
+        ranked = [r["id"] for r in db.q("SELECT f.id FROM files f WHERE " + W + " ORDER BY " + order, args)
+                  if r["id"] in score]
+    else:
+        ranked = sorted(score, key=lambda i: -score[i])
+    total = len(ranked)
     if ids_only:
-        return {"ids": order}
-    sl_ids = order[(page - 1) * per: page * per]
+        return {"ids": ranked}
+    sl_ids = ranked[(page - 1) * per: page * per]
     return _hydrate(db, sl_ids, total, page, per, score, used, words)
 
 
@@ -250,7 +261,23 @@ def _hydrate(db, ids, total, page, per, score, used, words=()):
 
 
 def facets(db):
+    from .config import DOC_FAMILIES as FAM
+    fam_of = {e: k for k, s in FAM.items() for e in s}
+    kinds = {r["kind"]: r["n"] for r in db.q("SELECT kind, COUNT(*) n FROM files WHERE status='ok' OR kind='other' "
+                                              "GROUP BY kind")}
+    families = {}
+    for r in db.q("SELECT ext, COUNT(*) n FROM files WHERE kind='doc' AND status='ok' GROUP BY ext"):
+        k = fam_of.get(r["ext"])
+        if k:
+            families[k] = families.get(k, 0) + r["n"]
+    blur_min = float(db.get_setting("blur_min", BLUR_GLOBAL_MIN))
     return {
+        "kinds": kinds, "families": families,
+        "blurry": db.one("SELECT COUNT(*) n FROM files WHERE status='ok' AND blur IS NOT NULL AND blur < ?",
+                         (blur_min,))["n"],
+        "people": [dict(r) for r in db.q(
+            "SELECT p.id, p.name, COUNT(DISTINCT x.file_id) n FROM persons p JOIN faces x ON x.person_id=p.id "
+            "GROUP BY p.id ORDER BY (p.name IS NULL), n DESC LIMIT 60")],
         "objects": [dict(r) for r in db.q("SELECT label, COUNT(DISTINCT file_id) n FROM objects GROUP BY label ORDER BY n DESC")],
         "scenes": [dict(r) for r in db.q("SELECT label, COUNT(*) n FROM scenes GROUP BY label ORDER BY n DESC")],
         "persons": [dict(r) for r in db.q("SELECT id, name FROM persons WHERE name IS NOT NULL ORDER BY name")],

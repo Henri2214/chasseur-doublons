@@ -91,6 +91,15 @@ main{padding:14px 20px 80px;flex:1;min-width:0}
 button.big{font-size:16px;font-weight:600;padding:12px 26px;border-radius:10px}
 details.adv{margin-top:8px}details.adv>summary{cursor:pointer;color:var(--mut);font-size:13px;padding:2px 0;user-select:none}
 details.adv>summary:hover{color:var(--acc)}details.adv[open]>summary{margin-bottom:6px}
+.fline{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0}.fline>b{min-width:92px;color:var(--tx);font-weight:600;font-size:13px}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}.chip small{opacity:.75}
+.grid.list{grid-template-columns:1fr;gap:4px}
+.grid.list .card{display:flex;align-items:center;border-width:1px}
+.grid.list .thumb{width:112px;height:54px;flex:none;justify-content:flex-end}.grid.list .thumb img{max-width:64px}
+.grid.list .tags{display:none}
+.grid.list .info{flex:1;display:grid;grid-template-columns:minmax(180px,2fr) 170px 190px minmax(160px,2fr) auto;gap:4px 14px;align-items:center;padding:4px 10px;min-width:0}
+.grid.list .info>*{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grid.list .snip{display:none}.grid.list .acts{overflow:visible;flex-wrap:nowrap}
 .guide{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin:30px auto;max-width:980px}
 .guide>div{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;text-align:left;box-shadow:var(--shadow)}
 .guide b{display:block;font-size:15px;margin:6px 0 4px;color:var(--tx)}.guide .ic{font-size:26px}
@@ -175,7 +184,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
     <div class="mods" title="Modules activables séparément">
       <label class="opt"><input type="checkbox" id="m_exact" checked><b>Copies exactes</b></label>
       <label class="opt"><input type="checkbox" id="m_visual" checked><b>Photos et vidéos ressemblantes</b></label>
-      <label class="opt" title="Lit le texte des documents (Word, PDF, tableurs, courriels...) pour retrouver le même contenu dans des fichiers différents, les versions proches d'un document, et pour chercher un mot dans l'onglet Rechercher. Les PDF scannés sont lus par OCR si « Texte » n'est pas sur « aucun »."><input type="checkbox" id="m_doctext" checked><b>Contenu des documents</b></label>
+      <label class="opt" title="Lit le texte des documents (Word, PDF, tableurs, courriels...) pour retrouver le même contenu dans des fichiers différents, les versions proches d'un document, et pour chercher un mot dans l'onglet Explorer. Les PDF scannés sont lus par OCR si « Texte » n'est pas sur « aucun »."><input type="checkbox" id="m_doctext" checked><b>Contenu des documents</b></label>
       <label class="opt"><input type="checkbox" id="m_quality" checked><b>Qualité des photos (netteté)</b></label>
       <label class="opt" title="Par défaut, seuls les fichiers nouveaux ou modifiés sont analysés (les autres sont repris de l'index, c'est pourquoi une 2e analyse est quasi instantanée). Cochez pour tout recalculer : visages, objets, empreintes. Les regroupements de personnes de ce dossier seront refaits."><input type="checkbox" id="m_force"><b>Tout réanalyser</b></label>
       <label class="opt">ignorer les fichiers de moins de <input type="number" id="min_kb" value="0" min="0" style="width:70px"> Ko</label>
@@ -186,7 +195,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
   <div class="prog" id="progw" style="display:none"><div id="pb"></div></div>
   <div id="phase"></div>
   <nav id="tabs">
-    <button data-t="dup" class="on">🗂 Doublons</button><button data-t="exp">🔎 Rechercher</button><button data-t="sim">✨ Similaires</button><button data-t="per">👥 Personnes</button><button data-t="ps">🙂 Trouver une personne</button>
+    <button data-t="dup" class="on">🗂 Doublons</button><button data-t="exp">🔎 Explorer</button><button data-t="sim">✨ Similaires</button><button data-t="per">👥 Personnes</button><button data-t="ps">🙂 Trouver une personne</button>
     <span class="sep"></span><button data-t="cal">Étalonnage</button><button data-t="rep">Rapport</button><button data-t="jou">Journal</button><button data-t="set">⚙ Réglages</button>
   </nav>
 </header>
@@ -223,20 +232,25 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 
 <!-- ============ EXPLORER ============ -->
 <section class="tab" id="t_exp">
+  <div class="panel" id="xfac"><h3>Tout ce qui a été trouvé <small class="muted" style="font-weight:400">— cliquez sur une étiquette pour lister les fichiers correspondants, puis cochez ceux à déplacer ou supprimer</small></h3><div id="xfacets" class="muted">Lancez une analyse pour remplir cette liste.</div></div>
   <div class="row"><input type="search" id="xq" class="grow" placeholder="Rechercher : « chien sur la plage », « facture EDF », un mot d'un document ou d'un courriel, une personne, un objet…"><button id="xgo" class="pri">Rechercher</button></div>
   <div class="row">
-    <select id="xkind"><option value="">Tous types</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents (tous)</option><option value="pdf">— PDF</option><option value="word">— Word / ODT / RTF</option><option value="tableur">— Tableurs</option><option value="presentation">— Présentations</option><option value="mail">— Courriels</option><option value="texte">— Texte / HTML</option></select>
+    <select id="xkind"><option value="">Tous types</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents (tous)</option><option value="pdf">— PDF</option><option value="word">— Word / ODT / RTF</option><option value="tableur">— Tableurs</option><option value="presentation">— Présentations</option><option value="mail">— Courriels</option><option value="texte">— Texte / HTML</option><option value="other">Autres fichiers</option></select>
     <select id="xperson"><option value="">Toute personne</option></select>
     <select id="xobject"><option value="">Tout objet</option></select>
     <select id="xscene"><option value="">Toute scène</option></select>
     <select id="xblur"><option value="">Netteté : toutes</option><option value="flou">Floues</option><option value="net">Nettes</option></select>
     <input type="text" id="xfolder" placeholder="Dossier" style="width:200px">
     <label class="opt">du <input type="date" id="xfrom"></label><label class="opt">au <input type="date" id="xto"></label>
+    <button id="xreset" title="Efface la recherche et tous les filtres">✖ Tout afficher</button>
     <span style="flex:1"></span><span class="muted" id="xsrc"></span>
+    <select id="xsort" title="Ordre de la liste"><option value="">Tri : plus récents</option><option value="ancien">Tri : plus anciens</option><option value="gros">Tri : plus gros</option><option value="petit">Tri : plus petits</option><option value="nom">Tri : nom</option><option value="dossier">Tri : dossier</option><option value="type">Tri : type</option></select>
+    <select id="xview" title="Présentation des résultats"><option value="grid">▦ Vignettes</option><option value="list">☰ Liste</option></select>
     <label class="opt">par page <select class="perp"><option value="50">50 photos</option><option value="100">100</option><option value="200">200</option><option value="500">500</option><option value="1000">1000</option></select></label>
     <button id="xall" title="Coche TOUS les résultats de la recherche (toutes les pages)">Tout sélectionner</button><button id="xnone">Tout désélectionner</button>
     <button id="xmv" disabled>Déplacer…</button><button id="xrm" class="bad" disabled>Supprimer</button>
   </div>
+  <div class="muted" id="xcount" style="margin:4px 0 8px"></div>
   <div id="xres" class="grid" style="padding:0"></div>
   <div class="pager" id="xpager"></div>
 </section>
@@ -244,7 +258,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 <!-- ============ SIMILAIRES ============ -->
 <section class="tab" id="t_sim">
   <div class="panel"><h3>Photos similaires</h3>
-    <p class="muted">Cliquez sur « Similaires » sous n'importe quelle photo (onglet Doublons, Rechercher ou dans l'aperçu plein écran) : toutes les photos qui ressemblent à celle-là sortent ici, même si ce ne sont pas des doublons. Quatre sources sont combinées : l'empreinte visuelle (recadrage, retouche, compression — fonctionne sans aucun modèle), les mêmes personnes (visages regroupés), les mêmes objets (YOLOX) et le même contenu (CLIP).</p>
+    <p class="muted">Cliquez sur « Similaires » sous n'importe quelle photo (onglet Doublons, Explorer ou dans l'aperçu plein écran) : toutes les photos qui ressemblent à celle-là sortent ici, même si ce ne sont pas des doublons. Quatre sources sont combinées : l'empreinte visuelle (recadrage, retouche, compression — fonctionne sans aucun modèle), les mêmes personnes (visages regroupés), les mêmes objets (YOLOX) et le même contenu (CLIP).</p>
     <div class="row" id="sim_head"><span class="muted">Aucune photo de référence pour l'instant.</span></div>
     <div class="row">
       <label class="opt" title="Plus bas : plus de photos, moins proches.">Ressemblance minimale <input type="range" id="sim_thr" min="0.30" max="0.95" step="0.01" value="0.55" style="width:200px"> <b id="sim_thr_v">0,55</b></label>
@@ -776,10 +790,29 @@ $("#pbio").onclick=async()=>{const t=prompt("Effacer TOUTES les données de visa
 let xpage=1,xdata=null;
 async function loadFacets(){try{const r=await api("/api/facets");
   const fill=(id,items,lab,val)=>{const s=$("#"+id),cur=s.value,first=s.options[0].outerHTML;s.innerHTML=first+items.map(x=>`<option value="${esc(val(x))}">${esc(lab(x))}</option>`).join("");s.value=cur};
-  fill("xperson",r.persons,x=>x.name,x=>x.id);fill("xobject",r.objects,x=>`${x.label} (${x.n})`,x=>x.label);fill("xscene",r.scenes,x=>`${x.label} (${x.n})`,x=>x.label)}catch(e){}}
+  fill("xperson",r.people,x=>(x.name||"Sans nom #"+x.id)+` (${x.n})`,x=>x.id);fill("xobject",r.objects,x=>`${x.label} (${x.n})`,x=>x.label);fill("xscene",r.scenes,x=>`${x.label} (${x.n})`,x=>x.label);
+  FAC=r;majFacettes()}catch(e){}}
+// liste cliquable de tout ce que l'index contient : types, personnes, objets, scènes, photos floues
+let FAC=null;
+function majFacettes(){const r=FAC;if(!r)return;
+  const chip=(id,val,lab,n)=>`<span class="chip${$("#"+id).value===String(val)?" on":""}" data-f="${id}" data-v="${esc(val)}">${esc(lab)} <small>${n}</small></span>`;
+  const K=r.kinds||{},F=r.families||{},FL={pdf:"PDF",word:"Word / ODT / RTF",tableur:"Tableurs",presentation:"Présentations",mail:"Courriels",texte:"Texte / HTML"};
+  let h="";const line=(t,c)=>{if(c)h+=`<div class="fline"><b>${t}</b>${c}</div>`};
+  line("Types",[["image","Images"],["video","Vidéos"],["doc","Documents"],["other","Autres fichiers"]].filter(([k])=>K[k]).map(([k,l])=>chip("xkind",k,l,K[k])).join(""));
+  line("Documents",Object.keys(FL).filter(k=>F[k]).map(k=>chip("xkind",k,FL[k],F[k])).join(""));
+  line("Personnes",(r.people||[]).map(p=>chip("xperson",p.id,p.name||"Sans nom #"+p.id,p.n)).join(""));
+  line("Objets",(r.objects||[]).map(o=>chip("xobject",o.label,o.label,o.n)).join(""));
+  line("Scènes",(r.scenes||[]).map(o=>chip("xscene",o.label,o.label,o.n)).join(""));
+  line("Qualité",r.blurry?chip("xblur","flou","Photos floues",r.blurry):"");
+  $("#xfacets").innerHTML=h||"Rien dans l'index pour l'instant : lancez une analyse (cochez Visages et Objets pour les retrouver ici).";$("#xfacets").classList.toggle("muted",!h)}
+$("#xfacets").addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c)return;const s=$("#"+c.dataset.f);
+  s.value=s.value===c.dataset.v?"":c.dataset.v;xsearch(1)});
+$("#xreset").onclick=()=>{$("#xq").value="";["xkind","xperson","xobject","xscene","xblur","xfolder","xfrom","xto"].forEach(i=>$("#"+i).value="");xsearch(1)};
+$("#xview").onchange=()=>{$("#xres").classList.toggle("list",$("#xview").value==="list");try{localStorage.setItem("xview",$("#xview").value)}catch(e){}};
+try{$("#xview").value=localStorage.getItem("xview")||"grid";$("#xview").onchange()}catch(e){}
 function xquery(extra){
   const q=new URLSearchParams({q:$("#xq").value,...extra});
-  for(const [k,id] of [["kind","xkind"],["person","xperson"],["object","xobject"],["scene","xscene"],["blur","xblur"],["folder","xfolder"]])if($("#"+id).value)q.set(k,$("#"+id).value);
+  for(const [k,id] of [["kind","xkind"],["person","xperson"],["object","xobject"],["scene","xscene"],["blur","xblur"],["folder","xfolder"],["sort","xsort"]])if($("#"+id).value)q.set(k,$("#"+id).value);
   if($("#xfrom").value)q.set("date_from",Date.parse($("#xfrom").value+"T00:00:00Z")/1000);
   if($("#xto").value)q.set("date_to",Date.parse($("#xto").value+"T23:59:59Z")/1000);
   return q}
@@ -791,11 +824,12 @@ async function xsearch(p){
   xpage=p||1;const q=xquery({page:xpage,per:PHOTOS});
   try{xdata=await api("/api/search?"+q);xdata.files.forEach(f=>byId[f.id]=f);
     $("#xsrc").textContent=xdata.sources.length?"sources : "+xdata.sources.join(", "):"";
+    $("#xcount").textContent=xdata.total?`${xdata.total} fichier(s) dans cette liste`:"";majFacettes();
     $("#xres").innerHTML=xdata.files.length?xdata.files.map(f=>cardHtml(f,null,xsel)).join(""):'<div class="empty" style="grid-column:1/-1">Aucun résultat (lancez d\'abord une analyse du dossier pour ouvrir la session).</div>';
     $("#xpager").innerHTML=pager(xdata.total,xpage,PHOTOS,"xp").replace(/^<div class="pager">|<\/div>$/g,"");updBar()}catch(e){toast(e.message,1)}
 }
 $("#xgo").onclick=()=>xsearch(1);$("#xq").onkeydown=e=>{if(e.key==="Enter")xsearch(1)};
-["xkind","xperson","xobject","xscene","xblur","xfrom","xto"].forEach(i=>$("#"+i).onchange=()=>xsearch(1));
+["xkind","xperson","xobject","xscene","xblur","xfrom","xto","xsort"].forEach(i=>$("#"+i).onchange=()=>xsearch(1));
 $("#xres").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const card=el.closest(".card"),f=byId[card.dataset.id];
   if(el.dataset.act==="sel")toggleSel(xsel,f.id,card,el);else if(el.dataset.act==="sim")openSimilar(f);else if(el.dataset.act==="view")view(f);
   else if(el.dataset.act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}else if(el.dataset.act==="ren")doRename(f)});

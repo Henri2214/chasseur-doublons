@@ -223,8 +223,9 @@ interrompue, le serveur local et tous ses processus s'arrêtent. Fermer l'onglet
 - Juste avant de supprimer, la taille et la date de modification sont revérifiées. Si le fichier a changé,
   la suppression est refusée.
 - Supprimer le **dernier exemplaire** d'un groupe est refusé sans une confirmation explicite.
-- Les actions ne portent que sur des fichiers indexés et situés dans le **périmètre de la session** (dossier
-  analysé et destinations de déplacement). Ce périmètre est remis à zéro à chaque nouvelle analyse.
+- Les actions ne portent que sur des fichiers indexés et situés dans le **périmètre autorisé** : les dossiers
+  que vous avez analysés avec l'outil (celui en cours et ceux des analyses précédentes) et les destinations de
+  déplacement. Rien d'autre sur le disque n'est accessible depuis la page.
 - Le serveur écoute sur 127.0.0.1 uniquement. Un jeton propre à chaque lancement est exigé pour toute requête
   d'action, et l'en-tête `Host` est contrôlé (protection contre le DNS rebinding).
 - Fichiers Windows :
@@ -345,8 +346,8 @@ CD_MODELS_DIR=models CD_TEST_IMAGES=dossier_portraits python -m pytest tests/tes
   mots) sont traduits ; une requête plus libre en français donne des résultats moins pertinents.
 - L'OCR (modèles chinois/anglais de rapidocr) peut perdre les accents. En mode « captures et documents »,
   toutes les images sans EXIF d'appareil sont lues : images WhatsApp, téléchargements…
-- Après un redémarrage, relancez l'analyse du dossier pour ouvrir la session (elle est quasi instantanée
-  grâce à l'index) : l'Explorer et les miniatures de visages ne montrent que le périmètre de la session.
+- Le périmètre autorisé (affichage et actions) est l'ensemble des dossiers déjà analysés avec l'outil et
+  toujours présents sur le disque ; il est rétabli à chaque lancement.
 - Le calcul des doublons est synchrone : quelques secondes pour 100 000 images, pendant lesquelles la page
   attend la réponse.
 - Les personnes sans nom peuvent être renumérotées lors d'un nouveau regroupement. Nommez une personne pour la
