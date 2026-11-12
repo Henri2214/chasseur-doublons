@@ -836,3 +836,85 @@ def snippet(text, query_words, width=220):
     a = max(0, pos - width // 3)
     s = text[a: a + width].replace("\n", " ")
     return ("… " if a else "") + s + (" …" if a + width < len(text) else "")
+
+
+# ------------------------------------------------------------------ miniature d'un document (aperçu du texte)
+FAMILY_COLORS = {"word": (43, 87, 154), "tableur": (33, 115, 70), "presentation": (210, 71, 38),
+                 "mail": (0, 120, 140), "texte": (95, 105, 125), "pdf": (200, 40, 40)}
+_FONTS = {}
+
+
+def _font(size, bold=False):
+    key = (size, bold)
+    if key not in _FONTS:
+        from PIL import ImageFont
+        f = None
+        names = (("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf") if bold
+                 else ("segoeui.ttf", "arial.ttf", "DejaVuSans.ttf"))
+        for n in names + ("/usr/share/fonts/truetype/dejavu/" + names[-1],):
+            try:
+                f = ImageFont.truetype(n, size)
+                break
+            except Exception:  # noqa
+                continue
+        if f is None:
+            try:
+                f = ImageFont.load_default(size)
+            except TypeError:          # Pillow < 10.1 : police fixe
+                f = ImageFont.load_default()
+        _FONTS[key] = f
+    return _FONTS[key]
+
+
+def text_thumbnail(text, ext, size=400, title=None):
+    """Image « première page » : bandeau de couleur du type de document, puis le début du texte."""
+    from PIL import Image, ImageDraw
+    H = int(size)
+    W = int(H * 0.76)
+    im = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(im)
+    col = FAMILY_COLORS.get(family(ext), (95, 105, 125))
+    band = max(16, H // 11)
+    d.rectangle([0, 0, W, band], fill=col)
+    fb = _font(max(9, int(band * 0.55)), True)
+    d.text((max(5, W // 28), band * 0.2), (ext or "").lstrip(".").upper(), fill="white", font=fb)
+    fs = max(7, H // 36)
+    f, ft = _font(fs), _font(fs + 1, True)
+    margin, y = max(5, W // 16), band + max(4, H // 40)
+    maxw, lh = W - 2 * margin, int(fs * 1.38)
+
+    def wrap(line, font):
+        out, cur = [], ""
+        for w in line.split(" "):
+            t = (cur + " " + w).strip()
+            if d.textlength(t, font=font) <= maxw:
+                cur = t
+            else:
+                if cur:
+                    out.append(cur)
+                while d.textlength(w, font=font) > maxw and len(w) > 1:     # mot plus large que la page
+                    k = max(1, int(len(w) * maxw / d.textlength(w, font=font)))
+                    out.append(w[:k])
+                    w = w[k:]
+                cur = w
+        out.append(cur)
+        return out
+    if title:
+        for ln in wrap(title.strip()[:160], ft)[:2]:
+            d.text((margin, y), ln, fill=(20, 28, 45), font=ft)
+            y += lh + 1
+        y += lh // 3
+    for raw in (text or "")[:6000].split("\n"):
+        if y + lh > H - margin // 2:
+            break
+        raw = raw.strip()
+        if not raw:
+            y += lh // 2
+            continue
+        for ln in wrap(raw, f):
+            if y + lh > H - margin // 2:
+                break
+            d.text((margin, y), ln, fill=(55, 62, 78), font=f)
+            y += lh
+    d.rectangle([0, 0, W - 1, H - 1], outline=(190, 198, 212))
+    return im

@@ -404,6 +404,15 @@ def create_app(state=None):
         except Exception:  # noqa
             return None
 
+    def doc_page(fid, ext, s):
+        d = S.db.one("SELECT substr(text, 1, 6000) t, title FROM doctext WHERE file_id=?", (fid,))
+        if not d or not (d["t"] or "").strip():
+            return None                        # contenu pas encore lu, ou document sans texte
+        try:
+            return docs.text_thumbnail(d["t"], ext, s, d["title"])
+        except Exception:  # noqa
+            return None
+
     def placeholder(label):
         svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#d5dce8"/>'
                '<text x="128" y="140" font-family="sans-serif" font-size="44" fill="#5d6a80" text-anchor="middle">%s</text></svg>'
@@ -417,12 +426,17 @@ def create_app(state=None):
             return placeholder("absent")       # jamais de vignette cassée dans la grille
         s = max(64, min(int(request.args.get("s", 320)), 800))
         ext = os.path.splitext(r["path"])[1].lower()
-        if r["kind"] == "other" or (r["kind"] == "doc" and (ext != ".pdf" or not docs.PDF)):
+        if r["kind"] == "other":
             return placeholder(ext.lstrip(".") or "fichier")
-        key = hashlib.sha1(("%s|%s|%s|%s" % (norm(r["path"]), r["mtime"], r["size"], s)).encode()).hexdigest()
+        key = hashlib.sha1(("%s|%s|%s|%s|v2" % (norm(r["path"]), r["mtime"], r["size"], s)).encode()).hexdigest()
         cf = os.path.join(S.thumbs, key[:2], key + ".jpg")
         if not os.path.exists(cf):
-            im = pdf_page(r["path"], s) if r["kind"] == "doc" else load_small(r["path"], r["kind"], s)
+            if r["kind"] == "doc":
+                im = pdf_page(r["path"], s) if ext == ".pdf" and docs.PDF else None
+                if im is None:                 # Word, Excel, courriel, texte... : aperçu du début du texte
+                    im = doc_page(r["id"], ext, s)
+            else:
+                im = load_small(r["path"], r["kind"], s)
             if im is None:
                 return placeholder(ext.lstrip("."))
             os.makedirs(os.path.dirname(cf), exist_ok=True)

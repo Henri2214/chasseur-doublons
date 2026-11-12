@@ -101,10 +101,22 @@ details.adv>summary:hover{color:var(--acc)}details.adv[open]>summary{margin-bott
 .grid.list .info>*{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grid.list .snip{display:none}.grid.list .acts{overflow:visible;flex-wrap:nowrap}
 .guide{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin:30px auto;max-width:980px}
-.guide>div{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;text-align:left;box-shadow:var(--shadow)}
-.guide b{display:block;font-size:15px;margin:6px 0 4px;color:var(--tx)}.guide .ic{font-size:26px}
+.gstep{flex:1;min-width:220px;background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:18px;text-align:left;box-shadow:var(--shadow);position:relative;display:flex;flex-direction:column;gap:4px;color:var(--mut);white-space:normal;transition:transform .12s,border-color .12s}
+.gstep:hover{transform:translateY(-2px);border-color:var(--acc)}
+.gstep b{font-size:15px;color:var(--tx)}.gstep .ic{font-size:26px}
+.gstep .gn{position:absolute;top:12px;right:14px;width:26px;height:26px;border-radius:50%;background:var(--panel2);color:var(--mut);font-weight:700;display:flex;align-items:center;justify-content:center}
+.gstep .ga{margin-top:8px;font-weight:600;color:var(--mut)}
+.gstep.now{border-color:var(--acc)}.gstep.now .gn{background:var(--acc);color:#fff}.gstep.now .ga{color:var(--acc)}
+.gstep.done{border-color:var(--ok)}.gstep.done .gn{background:var(--ok);color:#fff}.gstep.done .ga{color:var(--ok)}
+.gstep.wait{opacity:.6}
+@keyframes secoue{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}.gstep.secoue{animation:secoue .25s 2}
+#lbnav{position:fixed;inset:0;pointer-events:none;z-index:51;display:none}
+#lbnav button{pointer-events:auto;position:absolute;top:44%;width:52px;height:74px;font-size:30px;border-radius:10px;background:rgba(20,26,40,.72);color:#fff;border:1px solid rgba(255,255,255,.25)}
+#lbnav button:hover{background:var(--acc)}#lbprev{left:14px}#lbnext{right:14px}
+#lbhint{position:absolute;top:10px;left:50%;transform:translateX(-50%);color:#cfd6e4;font-size:12px;background:rgba(20,26,40,.72);padding:4px 12px;border-radius:999px;white-space:nowrap}
+kbd{border:1px solid rgba(255,255,255,.4);border-radius:4px;padding:0 5px;font:inherit}
 #selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:40;display:none;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--acc);border-radius:12px;padding:10px 16px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
-#lbcap a{text-decoration:none}#lbcap a{text-decoration:none}#lbcap a button{color:inherit}
+#lbcap a{text-decoration:none}#lbcap a{text-decoration:none}#lb .cap button{color:var(--tx)}
 #bye{position:fixed;inset:0;background:var(--bg);z-index:99;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;font-size:18px;text-align:center}
 #lbc.zone img{cursor:crosshair}
 #zrect{position:absolute;border:2px solid #4c8dff;background:rgba(76,141,255,.22);pointer-events:none;display:none}
@@ -214,10 +226,10 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
       <label class="opt">taille des miniatures <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures"></label> <label class="opt">par page <select id="perg"><option value="10">10 groupes</option><option value="20" selected>20</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select></label>
       <span class="muted" title="Cochez un fichier, puis maintenez Maj et cliquez sur un autre : tous ceux entre les deux sont cochés.">⇧ Maj + clic : cocher une plage</span></div></details>
   </div>
-  <div id="res"><div class="guide">
-    <div><span class="ic">📁</span><b>1. Choisissez un dossier</b>Photos, documents, téléchargements… tout le contenu du dossier et de ses sous-dossiers est examiné.</div>
-    <div><span class="ic">▶</span><b>2. Lancez l'analyse</b>La première fois, tout est indexé. Les fois suivantes, seuls les fichiers nouveaux ou modifiés sont relus.</div>
-    <div><span class="ic">🗂</span><b>3. Triez les doublons</b>Les fichiers en double sont regroupés. Cochez ceux à retirer, puis déplacez-les ou supprimez-les. Rien n'est supprimé sans votre accord.</div>
+  <div id="res"><div class="guide" id="guide">
+    <button type="button" class="gstep" data-g="1"><span class="gn">1</span><span class="ic">📁</span><b>Choisissez un dossier</b><span class="gt">Photos, documents, téléchargements… tout le contenu du dossier et de ses sous-dossiers est examiné.</span><span class="ga" id="g1a">Cliquez ici pour parcourir…</span></button>
+    <button type="button" class="gstep" data-g="2"><span class="gn">2</span><span class="ic">▶</span><b>Lancez l'analyse</b><span class="gt">La première fois, tout est indexé. Les fois suivantes, seuls les fichiers nouveaux ou modifiés sont relus.</span><span class="ga" id="g2a">Choisissez d'abord un dossier</span></button>
+    <button type="button" class="gstep" data-g="3"><span class="gn">3</span><span class="ic">🗂</span><b>Triez les doublons</b><span class="gt">Les fichiers en double sont regroupés. Cochez ceux à retirer, puis déplacez-les ou supprimez-les. Rien n'est supprimé sans votre accord.</span><span class="ga" id="g3a">Disponible après l'analyse</span></button>
   </div></div>
 </section>
 
@@ -328,6 +340,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 </div>
 
 <div id="lb"><div id="lbc"></div><div class="cap" id="lbcap"></div><div class="det" id="lbdet"></div></div>
+<div id="lbnav"><span id="lbhint"></span><button id="lbprev" title="Précédent (flèche gauche)">‹</button><button id="lbnext" title="Suivant (flèche droite)">›</button></div>
 <div id="modal"><div class="dlg">
   <h3 id="mtitle">Choisir un dossier</h3>
   <input type="text" id="mpath">
@@ -600,7 +613,33 @@ async function doRename(f){
   const n=prompt("Nouveau nom :",f.name);if(!n||n===f.name)return;
   try{const r=await api("/api/rename",{id:f.id,name:n});toast("Renommé en "+n,false,{label:"Annuler",fn:()=>undo([r.journal])});refreshAll()}catch(er){toast(er.message,1)}
 }
-function viewDoc(f){
+// ---- navigation dans l'aperçu : flèches gauche / droite, Suppr pour supprimer le fichier affiché
+let lbIds=[],lbCur=null,supprOk=false;
+function lbOuvre(f,garder){
+  if(!garder){lbIds=[...document.querySelectorAll(".tab.on .card")].map(c=>+c.dataset.id).filter((v,i,a)=>a.indexOf(v)===i);if(!lbIds.includes(f.id))lbIds=[f.id]}
+  lbCur=f;const i=lbIds.indexOf(f.id),n=lbIds.length;
+  $("#lbnav").style.display="block";$("#lbprev").style.visibility=i>0?"visible":"hidden";$("#lbnext").style.visibility=i<n-1?"visible":"hidden";
+  $("#lbhint").innerHTML=(n>1?`${i+1} / ${n} · <kbd>←</kbd> <kbd>→</kbd> précédent / suivant · `:"")+"<kbd>Suppr</kbd> supprimer · <kbd>Échap</kbd> fermer"}
+function lbVa(d){if(!lbCur||zoneF)return;const i=lbIds.indexOf(lbCur.id)+d;if(i<0||i>=lbIds.length)return;const f=byId[lbIds[i]];if(f)view(f,true)}
+async function lbSupprime(){
+  const f=lbCur;if(!f||zoneF)return;
+  if(!supprOk){if(!confirm(`Supprimer DÉFINITIVEMENT ce fichier ?\n\n${f.path}\n\nAucune corbeille : action irréversible.\nOK = supprimer, et ne plus demander pour les suivants tant que la page reste ouverte.`))return;supprOk=true}
+  try{let r=await api("/api/delete",{ids:[f.id]});
+    if(r.needs_confirm){if(!confirm("⚠ C'est le DERNIER exemplaire de ce groupe de doublons.\n\n"+f.path+"\n\nSupprimer quand même ?"))return;r=await api("/api/delete",{ids:[f.id],allow_last:true})}
+    if(!r.deleted){toast((r.errors[0]&&r.errors[0].error)||"Suppression impossible",1);return}
+    toast(`Supprimé : ${f.name} — ${fmtSize(r.freed)} libérés`);
+    [sel,xsel,psel,ssel].forEach(s=>s.delete(f.id));
+    const i=lbIds.indexOf(f.id);lbIds.splice(i,1);const suivant=byId[lbIds[Math.min(i,lbIds.length-1)]];
+    refreshAll();
+    if(suivant)view(suivant,true);else closeLb();
+  }catch(e){toast(e.message,1)}}
+$("#lbprev").onclick=e=>{e.stopPropagation();lbVa(-1)};$("#lbnext").onclick=e=>{e.stopPropagation();lbVa(1)};
+document.addEventListener("keydown",e=>{
+  if($("#lb").style.display!=="flex"||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
+  if(e.key==="ArrowLeft"){e.preventDefault();lbVa(-1)}else if(e.key==="ArrowRight"){e.preventDefault();lbVa(1)}
+  else if(e.key==="Delete"){e.preventDefault();lbSupprime()}},true);
+function viewDoc(f,garder){
+  lbOuvre(f,garder);
   const src="/api/file?id="+f.id,pdf=/\.pdf$/i.test(f.name||f.path||"");
   $("#lbc").innerHTML=`<div class="doc">Lecture…</div>`;zoneOff();
   $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+(f.kind==="doc"?' <button id="lbsim">Documents similaires</button>':"")+(pdf?' <button id="lbpdf">Afficher le PDF</button>':"")+` <a href="${src}" download><button>Télécharger / ouvrir</button></a>`;
@@ -615,8 +654,9 @@ function viewDoc(f){
       (d.error?`<b>Contenu non lu : ${esc(d.error)}</b>`:d.text?esc(d.text)+(d.chars>d.text.length?"\n\n[… texte tronqué pour l'aperçu …]":""):"<i>Aucun texte dans ce document"+(pdf?" (PDF scanné ? relancez l'analyse avec « Texte » sur « captures/documents » pour l'OCR)":"")+".</i>")}).catch(e=>{const b=$("#lbc .doc");if(b)b.textContent="Aperçu impossible : "+e.message});
 }
 $("#lbc").addEventListener("click",e=>{if(e.target.closest(".doc,iframe"))e.stopPropagation()});
-function view(f){
-  if(f.kind==="doc"||f.kind==="other")return viewDoc(f);
+function view(f,garder){
+  if(f.kind==="doc"||f.kind==="other")return viewDoc(f,garder);
+  lbOuvre(f,garder);
   const src="/api/file?id="+f.id;
   $("#lbc").innerHTML=f.kind==="video"?`<video src="${src}" controls autoplay></video>`:`<img src="${f.kind==="image"?src:"/api/thumb?id="+f.id+"&s=600"}">`;
   $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+' <button id="lbsim">Photos similaires</button>'+(f.kind==="image"?' <button id="lbzone" title="Tracez un rectangle autour d\'un objet, d\'un visage ou d\'un détail : toutes les photos qui contiennent la même chose ressortent">🔲 Chercher une zone</button>':"");
@@ -644,7 +684,7 @@ $("#quit").onclick=async()=>{
   if(!confirm("Arrêter complètement Chasseur de doublons ?\n\nL'analyse en cours (s'il y en a une) sera interrompue ; l'index déjà construit est conservé."))return;
   try{await api("/api/quit",{})}catch(e){}
   arrete=true;clearTimeout(pollT);$("#bye").style.display="flex";setTimeout(()=>{try{window.close()}catch(e){}},600)};
-function closeLb(){zoneOff();$("#lb").style.display="none";$("#lbc").innerHTML=""}
+function closeLb(){zoneOff();$("#lb").style.display="none";$("#lbnav").style.display="none";lbCur=null;$("#lbc").innerHTML=""}
 // ---- tracé d'une zone sur la photo agrandie
 let zoneF=null,zoneDrag=null;
 function zoneOff(){zoneF=null;zoneDrag=null;$("#lbc").classList.remove("zone")}
@@ -707,6 +747,18 @@ let scanRoot="",treeRoot="",tree={},ver=0,dragIds=[],hoverP=null,hoverT=0;
 const parentOf=p=>{const q=p.length>1?p.replace(/[\\/]+$/,""):p;const r=q.replace(/[\\/][^\\/]*$/,"");if(r===q)return p;if(r==="")return "/";return /^[A-Za-z]:$/.test(r)?r+"\\":r};
 const baseName=p=>p.replace(/[\\/]+$/,"").split(/[\\/]/).pop()||p;
 function setTop(){}
+// ---- guide de démarrage : les trois cartes sont des boutons
+function majGuide(){const g=$("#guide");if(!g)return;const ok=!!$("#path").value.trim(),run=$("#go").style.display==="none";
+  const [c1,c2,c3]=g.querySelectorAll(".gstep");
+  c1.className="gstep "+(ok?"done":"now");$("#g1a").textContent=ok?"✔ "+$("#path").value.trim()+" — cliquer pour changer":"Cliquez ici pour parcourir…";
+  c2.className="gstep "+(run?"done":ok?"now":"wait");$("#g2a").textContent=run?"Analyse en cours…":ok?"▶ Cliquez ici pour analyser":"Choisissez d'abord un dossier";
+  c3.className="gstep wait"}
+document.addEventListener("click",e=>{const c=e.target.closest(".gstep");if(!c)return;const g=c.dataset.g,ok=!!$("#path").value.trim();
+  const secoue=n=>{const x=$("#guide").querySelectorAll(".gstep")[n];x.classList.remove("secoue");void x.offsetWidth;x.classList.add("secoue")};
+  if(g==="1")$("#browse").click();
+  else if(g==="2"){if(ok)$("#go").click();else{secoue(0);toast("Choisissez d'abord un dossier (étape 1).",1)}}
+  else{secoue(ok?1:0);toast(ok?"Lancez d'abord l'analyse (étape 2) : les doublons s'afficheront ici.":"Choisissez d'abord un dossier (étape 1).",1)}});
+$("#path").addEventListener("input",majGuide);setInterval(majGuide,600);majGuide();
 // ---- thème clair / sombre (mémorisé sur ce navigateur)
 function majTheme(){const d=document.documentElement.dataset.theme==="dark";$("#theme").textContent=d?"☀ Clair":"🌙 Sombre"}
 $("#theme").onclick=()=>{const t=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=t;try{localStorage.setItem("theme",t)}catch(e){}majTheme()};majTheme();

@@ -270,7 +270,10 @@ def test_api_documents_et_quitter(dossier, state):
     assert info["family"] == "Courriel" and "pare-feu" in info["text"] and info["extra"]["a"] == "client@example.com"
     r = c.get("/api/file?id=%d" % fid)            # jamais affiché dans la page : téléchargement
     assert "attachment" in r.headers["Content-Disposition"]
-    assert c.get("/api/thumb?id=%d" % fid).mimetype == "image/svg+xml"
+    t = c.get("/api/thumb?id=%d&s=400" % fid)          # miniature : aperçu du début du texte
+    assert t.mimetype == "image/jpeg" and len(t.data) > 3000
+    autre = state.db.one("SELECT id FROM files WHERE name='a.bin'")["id"]
+    assert c.get("/api/thumb?id=%d" % autre).mimetype == "image/svg+xml"   # fichier illisible : simple étiquette
     # supprimer tout un groupe demande confirmation (dernier exemplaire)
     ids = [f["id"] for f in g["groups"][0]["files"]]
     assert c.post("/api/delete", json={"ids": ids}, headers=h).get_json()["needs_confirm"]
@@ -318,3 +321,13 @@ def test_dossiers_deja_analyses_restent_consultables(dossier, tmp_path):
     (autre / "note.txt").write_text("bonjour tout le monde")
     assert c.post("/api/scan", json={"path": str(autre)}, headers={"X-Token": s2.token}).status_code == 200
     assert s2.scope.contains(str(dossier / "contrat.docx")) and s2.scope.contains(str(autre / "note.txt"))
+
+
+def test_miniature_texte():
+    im = docs.text_thumbnail("Bonjour,\n\n" + "Un paragraphe assez long pour passer à la ligne. " * 20
+                             + "\n" + "x" * 500, ".docx", 400, "Titre du document")
+    assert im.size == (304, 400)
+    px = im.convert("RGB")
+    assert px.getpixel((150, 10)) == (43, 87, 154)             # bandeau bleu « Word »
+    assert sum(1 for x in range(20, 280) for y in range(60, 380, 3) if px.getpixel((x, y)) != (255, 255, 255)) > 300
+    assert docs.text_thumbnail("", ".xlsx", 64).size == (48, 64)   # jamais d'erreur, même vide et minuscule

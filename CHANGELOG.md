@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.10.0 - 2026-11-12
+### Ajouté
+- **Guide de démarrage interactif** : les trois cartes sont des boutons. « 1 » ouvre le choix du dossier,
+  « 2 » lance l'analyse ; chaque carte indique son état (à faire, fait, en attente) et signale l'étape
+  manquante si on clique trop tôt.
+- **Miniatures des documents** : Word, Excel, PowerPoint, OpenDocument, RTF, texte et courriels affichent un
+  aperçu du début de leur texte (bandeau de couleur par type), comme les PDF affichent leur première page.
+  Disponible partout (Explorer, Doublons, Similaires) pour les documents dont le contenu a été lu.
+- **Navigation au clavier dans l'aperçu** : flèches gauche / droite pour passer au fichier précédent ou
+  suivant de la liste affichée, **Suppr** pour supprimer le fichier ouvert (l'aperçu passe au suivant). La
+  première suppression demande confirmation, les suivantes non tant que la page reste ouverte ; le dernier
+  exemplaire d'un groupe de doublons demande toujours confirmation. Boutons ‹ › à l'écran et rappel des touches.
+### Corrigé
+- Boutons de l'aperçu illisibles en thème clair (texte blanc sur fond clair).
+
 ## 2.9.0 - 2026-11-12
 ### Ajouté
 - **Installateur Windows en un seul fichier** : `ChasseurDoublons-v<version>-Setup.exe` contient le programme,
