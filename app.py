@@ -128,7 +128,8 @@ def _main(argv=None):
     ap.add_argument("--sans-modeles", action="store_true", help="ne pas télécharger automatiquement les modèles")
     ap.add_argument("--console", action="store_true", help="géré par lancer.bat : garde la fenêtre de commandes")
     ap.add_argument("--arret-auto", type=int, default=10, metavar="MIN",
-                    help="arrêt automatique après MIN minutes sans page ouverte (0 = jamais ; défaut 10)")
+                    help="filet de sécurité : arrêt après MIN minutes sans page ouverte (défaut 10). "
+                         "0 = ne jamais s'arrêter seul, même quand le navigateur est fermé")
     a = ap.parse_args(argv)
     from core.config import DATA_DIR
     journaliser(a.data or str(DATA_DIR))
@@ -182,6 +183,8 @@ def _main(argv=None):
         pass
     if not a.no_browser:
         threading.Timer(1.0, lambda: ouvrir_page(url)).start()
+    # fermer le navigateur arrête l'application (sauf usage sans page : --no-browser, ou --arret-auto 0)
+    app.config["ARRET_FERMETURE"] = a.arret_auto > 0 and not a.no_browser
     if a.arret_auto > 0 and not a.no_browser:
         threading.Thread(target=surveiller, args=(state, a.arret_auto), daemon=True).start()
     if sans_console():

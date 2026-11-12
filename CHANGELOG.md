@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.1 - 2026-11-12
+### Modifié
+- **Fermer le navigateur arrête l'application.** À la fermeture de l'onglet ou de la fenêtre, la page prévient
+  l'application, qui s'arrête complètement environ 6 secondes plus tard (analyse en cours comprise) si aucune
+  autre page n'est ouverte. Un rechargement (F5) ou un second onglet ouvert ne coupe rien. Si le navigateur
+  disparaît sans prévenir (plantage), l'arrêt après 10 minutes sans page reste le filet de sécurité.
+  `--arret-auto 0` désactive les deux, `--no-browser` aussi.
+
 ## 2.10.0 - 2026-11-12
 ### Ajouté
 - **Guide de démarrage interactif** : les trois cartes sont des boutons. « 1 » ouvre le choix du dossier,

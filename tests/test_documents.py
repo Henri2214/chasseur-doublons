@@ -331,3 +331,37 @@ def test_miniature_texte():
     assert px.getpixel((150, 10)) == (43, 87, 154)             # bandeau bleu « Word »
     assert sum(1 for x in range(20, 280) for y in range(60, 380, 3) if px.getpixel((x, y)) != (255, 255, 255)) > 300
     assert docs.text_thumbnail("", ".xlsx", 64).size == (48, 64)   # jamais d'erreur, même vide et minuscule
+
+
+def test_fermeture_du_navigateur_arrete_l_application(state):
+    app = create_app(state)
+    app.testing = True
+    sorties = []
+    app.config.update(EXIT=sorties.append, DELAI_FERMETURE=0.3)
+    c = app.test_client()
+    c.environ_base["HTTP_HOST"] = "127.0.0.1:8765"
+    assert c.post("/api/bye?p=a").status_code == 403                       # jeton obligatoire
+    # deux pages ouvertes : en fermer une ne coupe rien
+    c.get("/api/ping?p=a")
+    c.get("/api/ping?p=b")
+    assert c.post("/api/bye?p=a&t=" + state.token).get_json()["arret"]
+    time.sleep(0.5)
+    c.get("/api/ping?p=b")                 # l'autre page continue de donner signe de vie
+    time.sleep(0.7)
+    assert sorties == []
+    # rechargement : la page se ferme puis redonne signe de vie aussitôt
+    c.post("/api/bye?p=b&t=" + state.token)
+    time.sleep(0.1)
+    c.get("/api/ping?p=c")
+    time.sleep(1.2)
+    assert sorties == []
+    # dernière page fermée : arrêt
+    c.post("/api/bye?p=c&t=" + state.token)
+    for _ in range(60):
+        if sorties:
+            break
+        time.sleep(0.1)
+    assert sorties == [0]
+    # mode sans page (--no-browser) : jamais d'arrêt sur fermeture
+    app.config["ARRET_FERMETURE"] = False
+    assert c.post("/api/bye?p=z&t=" + state.token).get_json()["arret"] is False

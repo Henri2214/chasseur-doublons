@@ -1102,9 +1102,14 @@ $("#browse").onclick=()=>pickDir("Choisir le dossier à analyser",p=>$("#path").
 plage("#res",sel);plage("#xres",xsel);plage("#sim_res",ssel);plage("#ps_res",psel);
 loadCaps().then(poll).catch(e=>toast(e.message,1));setTop();
 // signe de vie : tant qu'une page est ouverte, l'application reste en route ; si elle ne répond plus, on le dit
+const PAGE=Math.random().toString(36).slice(2)+Date.now().toString(36);
 let pingKo=0,arrete=false;
-setInterval(async()=>{if(arrete)return;try{await api("/api/ping");pingKo=0}catch(e){if(++pingKo>=3){arrete=true;
-  $("#bye").innerHTML='<div>⏹ Chasseur de doublons ne répond plus.</div><small class="muted">L\'application a été arrêtée (bouton Quitter, ou arrêt automatique après une longue inactivité).<br>Relancez-la, puis rechargez cette page.</small><button onclick="location.reload()">Recharger la page</button>';$("#bye").style.display="flex"}}},30000);
+async function signe(){if(arrete)return;try{await api("/api/ping?p="+PAGE);pingKo=0}catch(e){if(++pingKo>=3){arrete=true;
+  $("#bye").innerHTML='<div>⏹ Chasseur de doublons ne répond plus.</div><small class="muted">L\'application a été arrêtée (bouton Quitter, fermeture du navigateur, ou longue inactivité).<br>Relancez-la, puis rechargez cette page.</small><button onclick="location.reload()">Recharger la page</button>';$("#bye").style.display="flex"}}}
+signe();setInterval(signe,15000);
+// fermeture de l'onglet ou du navigateur : on prévient l'application, qui s'arrête si aucune autre page n'est ouverte
+window.addEventListener("pagehide",()=>{if(!arrete)try{navigator.sendBeacon("/api/bye?t="+TOKEN+"&p="+PAGE)}catch(e){}});
+window.addEventListener("pageshow",e=>{if(e.persisted)signe()});
 </script>
 </body>
 </html>

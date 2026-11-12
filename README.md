@@ -220,7 +220,8 @@ moment-là), démarre l'application en arrière-plan et se referme ; la page s'o
 - Relancer l'application alors qu'elle tourne déjà rouvre simplement la page.
 - Les messages sont écrits dans `data\journal.log`. Pour voir la fenêtre de messages : `lancer.bat --console`
   ou `ChasseurDoublons-diagnostic.exe`.
-- Sans page ouverte depuis 10 minutes, l'application s'arrête seule (jamais pendant une analyse) ;
+- Fermer l'onglet ou le navigateur arrête l'application quelques secondes plus tard (un rechargement ou un
+  second onglet ouvert ne coupe rien). Filet de sécurité : arrêt après 10 minutes sans page ouverte ;
   `--arret-auto 0` désactive cet arrêt, `--arret-auto 30` le règle à 30 minutes.
 
 L'interface est claire par défaut ; le bouton « Sombre / Clair » en haut à droite change de thème.

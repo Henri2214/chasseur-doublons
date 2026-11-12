@@ -53,6 +53,7 @@ class State:
         self._face_engines = {}
         self._face_lock = threading.Lock()
         self.last_seen = time.time()  # dernière requête reçue (arrêt automatique quand la page est fermée)
+        self.pages = {}               # pages ouvertes : identifiant -> heure du dernier signe de vie
         self.zone_cache = {}          # (photo, zone) -> signature de la zone tracée
         self.psearch_refs = {}        # jeton -> {"engine": str, "embs": [vecteurs]} (photos de référence envoyées)
 
@@ -112,14 +113,58 @@ def create_app(state=None):
         host = (request.host or "").rsplit(":", 1)[0]
         if host not in allowed_hosts and not app.config.get("ALLOW_ANY_HOST"):
             abort(403)
-        if request.method == "POST" and request.headers.get("X-Token") != S.token:
+        jeton = request.headers.get("X-Token")
+        if request.path == "/api/bye":      # envoyé par le navigateur à la fermeture : pas d'en-tête possible
+            jeton = jeton or request.args.get("t")
+        if request.method == "POST" and jeton != S.token:
             abort(403)
         S.last_seen = time.time()
 
     @app.get("/api/ping")
     def api_ping():
-        """Signe de vie de la page (toutes les 30 s) ; sert aussi à reconnaître une instance déjà lancée."""
+        """Signe de vie de la page (toutes les 15 s) ; sert aussi à reconnaître une instance déjà lancée."""
+        p = request.args.get("p")
+        if p:
+            S.pages[p[:40]] = time.time()
         return jsonify(app="chasseur-doublons", version=__version__)
+
+    def arreter(attendre=8):
+        """Arrêt complet : analyse interrompue, index refermé proprement, processus terminé."""
+        S.scanner.cancel = True
+        t0 = time.time()
+        while S.scanner.state["status"] == "running" and time.time() - t0 < attendre:
+            time.sleep(0.1)
+        try:
+            S.db.conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:  # noqa
+            pass
+        time.sleep(0.3)                    # laisse partir la réponse HTTP
+        app.config.get("EXIT", os._exit)(0)
+
+    @app.post("/api/bye")
+    def api_bye():
+        """La page se ferme (onglet ou navigateur). Si aucune autre page n'est ouverte quelques secondes plus
+        tard — un simple rechargement en rouvre une aussitôt —, l'application s'arrête complètement."""
+        S.pages.pop((request.args.get("p") or "")[:40], None)
+        if not app.config.get("ARRET_FERMETURE", True):
+            return jsonify(ok=True, arret=False)
+        depart = time.time()
+
+        def verifier():
+            time.sleep(float(app.config.get("DELAI_FERMETURE", 6)))
+            while True:
+                now = time.time()
+                if any(t > depart for t in S.pages.values()):
+                    return                 # une page a donné signe de vie depuis : rechargement ou autre onglet
+                # une page en arrière-plan ne donne signe de vie qu'une fois par minute : on lui laisse 150 s
+                # (c'est aussi le délai pour un onglet disparu sans prévenir)
+                if not any(now - t < 150 for t in S.pages.values()):
+                    break
+                time.sleep(5)
+            print("Navigateur fermé : arrêt de l'application.")
+            arreter()
+        threading.Thread(target=verifier, daemon=True).start()
+        return jsonify(ok=True, arret=True)
 
     def body():
         return request.get_json(force=True, silent=True) or {}
@@ -240,18 +285,7 @@ def create_app(state=None):
     def api_quit():
         """Arrête complètement l'application (serveur, analyse en cours, processus auxiliaires)."""
         S.scanner.cancel = True
-
-        def stop():
-            t0 = time.time()
-            while S.scanner.state["status"] == "running" and time.time() - t0 < 8:
-                time.sleep(0.1)
-            try:
-                S.db.conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            except Exception:  # noqa
-                pass
-            time.sleep(0.3)                # laisse partir la réponse HTTP
-            app.config.get("EXIT", os._exit)(0)
-        threading.Thread(target=stop, daemon=True).start()
+        threading.Thread(target=arreter, daemon=True).start()
         return jsonify(ok=True)
 
     @app.post("/api/cancel")
