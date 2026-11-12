@@ -1,0 +1,83 @@
+# Construit l'application autonome Windows et la publie dans les « Releases » du dépôt.
+# Déclenchement : pousser une étiquette de version (git tag v2.9.0 ; git push origin v2.9.0),
+# ou à la main depuis l'onglet Actions (« Run workflow »).
+#
+# Fichiers publiés :
+#   ChasseurDoublons-v<version>-Setup.exe      installateur (un seul fichier, tout compris) — à privilégier
+#   ChasseurDoublons-v<version>-portable.exe   un seul fichier, sans installation
+name: Construire l'exécutable Windows
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+          python -m pytest -q tests
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Construction (installateur, version portable, modèles à licence libre)
+        shell: pwsh
+        run: .\tools\construire.ps1 -TelechargerModeles -Python python
+      - name: Essai de l'installateur (installation silencieuse puis démarrage)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem dist\ChasseurDoublons-v*-Setup.exe).FullName
+          $cible = "$env:RUNNER_TEMP\installe"
+          $i = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/DIR=$cible" -PassThru -Wait
+          if ($i.ExitCode -ne 0) { throw "installation en échec (code $($i.ExitCode))" }
+          if (-not (Test-Path "$cible\_internal")) { throw "installation incomplète" }
+          $p = Start-Process -FilePath "$cible\ChasseurDoublons.exe" -ArgumentList "--no-browser","--port","8799","--sans-modeles" -PassThru
+          Start-Sleep -Seconds 25
+          $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8799/api/caps
+          Stop-Process -Id $p.Id -Force
+          if ($r.StatusCode -ne 200) { throw "l'application installée ne répond pas" }
+          $r.Content
+          if (-not (Test-Path "$env:LOCALAPPDATA\ChasseurDoublons\data\index.sqlite3")) { throw "données absentes du profil utilisateur" }
+      - name: Essai de la version portable (exécutable seul dans un dossier vide)
+        shell: pwsh
+        run: |
+          $seul = "$env:RUNNER_TEMP\seul"
+          New-Item -ItemType Directory -Force $seul | Out-Null
+          Copy-Item (Get-ChildItem dist\ChasseurDoublons-v*-portable.exe).FullName "$seul\Chasseur.exe"
+          $p = Start-Process -FilePath "$seul\Chasseur.exe" -ArgumentList "--no-browser","--port","8798","--sans-modeles" -PassThru
+          $ok = $false
+          foreach ($n in 1..40) {
+            Start-Sleep -Seconds 3
+            try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8798/api/caps; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch {}
+          }
+          Get-Process Chasseur -ErrorAction SilentlyContinue | Stop-Process -Force
+          if (-not $ok) { throw "la version portable ne répond pas" }
+          "démarrage en $($n * 3) s environ"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChasseurDoublons-win64
+          path: |
+            dist/ChasseurDoublons-v*-Setup.exe
+            dist/ChasseurDoublons-v*-portable.exe
+          compression-level: 0
+      - name: Publication dans Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/ChasseurDoublons-v*-Setup.exe
+            dist/ChasseurDoublons-v*-portable.exe
+          generate_release_notes: true

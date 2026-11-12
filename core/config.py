@@ -9,23 +9,36 @@ import os
 import sys
 from pathlib import Path
 
-# Application « gelée » (exécutable PyInstaller) : les ressources (page web) sont dans le paquet, tandis que
-# les données et les modèles vivent à côté de l'exécutable — ou dans le profil de l'utilisateur si ce
-# dossier n'est pas accessible en écriture (Program Files, par exemple).
+# Application « gelée » (exécutable PyInstaller) : les ressources (page web) sont dans le paquet.
+#
+# Où vont les données (index, miniatures, journal) et les modèles téléchargés ?
+#   - par défaut dans le profil de l'utilisateur : %LOCALAPPDATA%\ChasseurDoublons. L'exécutable peut ainsi
+#     être déplacé, remplacé par une nouvelle version ou posé seul n'importe où sans rien perdre ;
+#   - mode portable (clé USB) : si un dossier « data » ou un fichier « portable.txt » se trouve à côté de
+#     l'exécutable et que l'emplacement est accessible en écriture, tout reste à côté de lui.
+# Les modèles livrés avec l'application (dossier « models » à côté de l'exécutable, ou dans le paquet) sont
+# lus sur place : ils ne sont jamais recopiés.
 FROZEN = bool(getattr(sys, "frozen", False))
+MODELS_EXTRA = []
+PORTABLE = False
 if FROZEN:
     RES_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
-    BASE = Path(sys.executable).resolve().parent
-    try:
-        _t = BASE / ".ecriture"
-        _t.write_text("ok")
-        _t.unlink()
-    except OSError:
-        BASE = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "ChasseurDoublons"
-        BASE.mkdir(parents=True, exist_ok=True)
+    EXE_DIR = Path(sys.executable).resolve().parent
+    USER_DIR = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "ChasseurDoublons"
+    BASE = USER_DIR
+    if (EXE_DIR / "data").is_dir() or (EXE_DIR / "portable.txt").exists():
+        try:
+            _t = EXE_DIR / ".ecriture"
+            _t.write_text("ok")
+            _t.unlink()
+            BASE, PORTABLE = EXE_DIR, True
+        except OSError:
+            pass
+    BASE.mkdir(parents=True, exist_ok=True)
+    MODELS_EXTRA = [p for p in (EXE_DIR / "models", RES_DIR / "models") if p != BASE / "models"]
 else:
     BASE = Path(__file__).resolve().parent.parent
-    RES_DIR = BASE
+    RES_DIR = EXE_DIR = BASE
 DATA_DIR = Path(os.environ.get("CD_DATA_DIR") or (BASE / "data"))
 MODELS_DIR = Path(os.environ.get("CD_MODELS_DIR") or (BASE / "models"))
 DB_NAME = "index.sqlite3"

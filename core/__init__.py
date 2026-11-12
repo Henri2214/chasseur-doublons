@@ -1,2 +1,2 @@
 """Chasseur de doublons v2 - noyau (index, analyse, doublons, documents, visages, objets, OCR, CLIP)."""
-__version__ = "2.8.1"
+__version__ = "2.9.0"

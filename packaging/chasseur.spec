@@ -1,10 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Recette PyInstaller : dossier autonome ChasseurDoublons/ (exécutable + _internal/).
+"""Recette PyInstaller (lancée par tools/construire.ps1). Deux sorties à partir de la même analyse :
 
-    pyinstaller --noconfirm packaging/chasseur.spec        (lancé par tools/construire.ps1)
+  dist/ChasseurDoublons/                 dossier complet (exécutable + _internal/) : c'est lui que
+                                         l'installateur « Setup » empaquette. L'exécutable de ce dossier ne
+                                         fonctionne PAS sorti de son dossier.
+  dist/ChasseurDoublons-portable.exe     un seul fichier, utilisable seul n'importe où (il se décompresse dans
+                                         un dossier temporaire à chaque lancement : démarrage plus lent).
 
-Aucun Python n'est nécessaire sur le PC de destination. Les modèles d'IA ne sont PAS dans l'exécutable :
-ils sont copiés à côté (dossier models/) par le script de construction, ou téléchargés au premier lancement.
+Aucun Python n'est nécessaire sur le PC de destination. Les modèles d'IA ne sont pas dans les exécutables :
+ils sont copiés dans le dossier (donc dans l'installateur) ou téléchargés au premier lancement.
 """
 import os
 from PyInstaller.utils.hooks import collect_all
@@ -36,3 +40,15 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ChasseurDoublons", co
 exe_diag = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ChasseurDoublons-diagnostic", console=True,
                icon=icon if os.path.exists(icon) else None, upx=False)
 coll = COLLECT(exe, exe_diag, a.binaries, a.datas, name="ChasseurDoublons", upx=False)
+
+# ---- version en un seul fichier, avec un écran de démarrage pendant la décompression (si Tcl/Tk est là)
+extra = []
+image = os.path.join(SPECPATH, "demarrage.png")
+if os.path.exists(image) and not os.environ.get("CD_SANS_ECRAN"):
+    try:
+        splash = Splash(image, binaries=a.binaries, datas=a.datas)
+        extra = [splash, splash.binaries]
+    except BaseException as e:      # Tcl/Tk absent du Python de construction : on s'en passe
+        print("  (écran de démarrage non inclus : %s)" % e)
+portable = EXE(pyz, a.scripts, a.binaries, a.datas, *extra, [], name="ChasseurDoublons-portable", console=False,
+               icon=icon if os.path.exists(icon) else None, upx=False, runtime_tmpdir=None)

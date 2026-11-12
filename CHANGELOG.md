@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.9.0 - 2026-11-12
+### Ajouté
+- **Installateur Windows en un seul fichier** : `ChasseurDoublons-v<version>-Setup.exe` contient le programme,
+  toutes ses bibliothèques et les modèles d'IA à licence libre. Installation sans droits d'administrateur,
+  raccourcis dans le menu Démarrer et sur le Bureau, désinstallation depuis les paramètres Windows, mise à
+  jour par simple réinstallation (une version en route est arrêtée d'abord). Recette
+  `packaging/installateur.iss` (Inno Setup 6).
+- **Version portable en un seul fichier** : `ChasseurDoublons-v<version>-portable.exe`, utilisable seule,
+  posée n'importe où, sans installation (écran « Démarrage en cours » pendant la décompression ; modèles
+  téléchargés au premier lancement).
+- La construction GitHub installe réellement l'installateur et lance l'exécutable portable seul dans un
+  dossier vide avant de publier quoi que ce soit.
+### Modifié
+- **Données dans le profil de l'utilisateur** (`%LOCALAPPDATA%\ChasseurDoublons` : index, miniatures, journaux,
+  modèles téléchargés) : l'exécutable peut être déplacé ou remplacé sans rien perdre. Mode portable conservé :
+  un dossier `data` (ou un fichier `portable.txt`) à côté de l'exécutable garde tout sur place.
+- Les modèles livrés avec l'application sont lus sur place, sans copie ; un modèle livré ne peut pas être
+  supprimé par erreur depuis Réglages.
+- Ouverture du navigateur par deux moyens successifs ; `construire.ps1` ne produit l'archive `.zip` du dossier
+  que sur demande (`-Zip`), car son exécutable ne fonctionne pas sorti du dossier.
+
 ## 2.8.1 - 2026-11-10
 ### Corrigé
 - **Onglet Personnes : vignettes de visages vides.** L'index garde les visages de tous les dossiers déjà

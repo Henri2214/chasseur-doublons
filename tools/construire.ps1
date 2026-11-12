@@ -1,17 +1,27 @@
 <#
-    Construit l'application autonome Windows : dist\ChasseurDoublons\ChasseurDoublons.exe
-    et l'archive dist\ChasseurDoublons-v<version>-win64.zip (aucun Python requis sur le PC de destination).
+    Construit l'application autonome Windows (aucun Python requis sur le PC de destination).
 
-        .\tools\construire.ps1                       # modèles déjà présents dans models\ copiés dans le paquet
+    Trois résultats dans dist\ :
+      ChasseurDoublons-v<version>-Setup.exe      INSTALLATEUR, un seul fichier : programme + bibliothèques + modèles.
+                                                 C'est le fichier à donner. (Nécessite Inno Setup 6 pour être construit.)
+      ChasseurDoublons-v<version>-portable.exe   un seul fichier utilisable sans installation, posé n'importe où
+                                                 (démarrage plus lent ; modèles téléchargés au premier lancement).
+      ChasseurDoublons\                          le dossier complet. ATTENTION : ChasseurDoublons.exe ne fonctionne
+                                                 pas sorti de ce dossier (il a besoin de _internal\).
+
+        .\tools\construire.ps1                       # modèles déjà présents dans models\ mis dans l'installateur
         .\tools\construire.ps1 -TelechargerModeles   # télécharge d'abord les modèles conseillés
-        .\tools\construire.ps1 -SansModeles          # paquet léger : modèles téléchargés au premier lancement
+        .\tools\construire.ps1 -SansModeles          # installateur léger : modèles téléchargés au premier lancement
         .\tools\construire.ps1 -Cpu                  # sans accélération GPU DirectML
+        .\tools\construire.ps1 -Zip                  # ajoute l'archive .zip du dossier complet
+
+    Inno Setup 6 (gratuit) :  winget install JRSoftware.InnoSetup
 
     Les modèles InsightFace (licence « recherche non commerciale ») ne sont JAMAIS mis dans le paquet :
     l'utilisateur les télécharge lui-même dans Réglages après avoir accepté la licence.
 #>
 [CmdletBinding()]
-param([switch]$TelechargerModeles, [switch]$SansModeles, [switch]$Cpu, [string]$Python = "")
+param([switch]$TelechargerModeles, [switch]$SansModeles, [switch]$Cpu, [switch]$Zip, [string]$Python = "")
 
 $ErrorActionPreference = "Stop"
 $racine = Split-Path -Parent $PSScriptRoot
@@ -76,10 +86,14 @@ if (-not $SansModeles) {
     }
 }
 
-# ---- notice et archive
+# ---- notice
 @"
-Chasseur de doublons $version - application autonome
-====================================================
+Chasseur de doublons $version
+=============================
+
+IMPORTANT : ChasseurDoublons.exe ne fonctionne que DANS ce dossier (il a besoin du dossier _internal).
+Pour un fichier unique, utilisez l'installateur ChasseurDoublons-v$version-Setup.exe ou la version
+ChasseurDoublons-v$version-portable.exe.
 
 Lancement : double-clic sur ChasseurDoublons.exe. Aucune fenetre ne s'ouvre : la page s'affiche
 directement dans votre navigateur (http://127.0.0.1:8765).
@@ -89,16 +103,12 @@ l'application s'arrete seule au bout de 10 minutes (jamais pendant une analyse).
 double-clic rouvre simplement la page.
 
 En cas de probleme : lancez ChasseurDoublons-diagnostic.exe (meme programme, avec sa fenetre de
-messages) ou lisez data\journal.log.
+messages) ou lisez journal.log dans le dossier des donnees.
 
 Tout reste sur ce PC : aucune photo n'est envoyee sur Internet.
 
-Dossiers crees a cote de l'executable :
-  data\    index de vos analyses, miniatures, journal (plantage.log en cas de probleme)
-  models\  modeles d'IA (visages OpenCV, objets YOLOX, contenu CLIP)
-
-Si le dossier n'est pas accessible en ecriture (Program Files), ces dossiers sont crees dans
-%LOCALAPPDATA%\ChasseurDoublons.
+Donnees (index, miniatures, journaux, modeles telecharges) : %LOCALAPPDATA%\ChasseurDoublons
+Mode portable (cle USB) : creez un dossier "data" a cote de l'executable, tout y restera.
 
 Modeles InsightFace (visages plus precis) : non fournis, licence "recherche non commerciale".
 A telecharger dans l'onglet Reglages apres acceptation de la licence.
@@ -106,12 +116,42 @@ A telecharger dans l'onglet Reglages apres acceptation de la licence.
 Options : ChasseurDoublons.exe --port 8765 --no-browser --data D:\Donnees --models D:\Modeles --sans-modeles
 "@ | Set-Content -Encoding UTF8 (Join-Path $app "LISEZMOI.txt")
 
-$zip = Join-Path $racine "dist\ChasseurDoublons-v$version-win64.zip"
-if (Test-Path $zip) { Remove-Item $zip -Force }
-Write-Host "== Archive" -ForegroundColor Cyan
-Compress-Archive -Path $app -DestinationPath $zip -CompressionLevel Optimal
-$mo = [math]::Round((Get-Item $zip).Length / 1MB)
+$produits = @()
+
+# ---- version en un seul fichier
+$brut = Join-Path $racine "dist\ChasseurDoublons-portable.exe"
+if (Test-Path $brut) {
+    $portable = Join-Path $racine "dist\ChasseurDoublons-v$version-portable.exe"
+    Move-Item -Force $brut $portable
+    $produits += $portable
+}
+
+# ---- installateur (Inno Setup 6)
+$iscc = $null
+$cmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
+if ($cmd) { $iscc = $cmd.Source }
+foreach ($c in @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe", "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe")) {
+    if (-not $iscc -and $c -and (Test-Path $c)) { $iscc = $c }
+}
+if ($iscc) {
+    Executer "Installateur (Inno Setup)" { & $iscc "/DVersion=$version" "/Qp" (Join-Path $racine "packaging\installateur.iss") }
+    $produits += (Join-Path $racine "dist\ChasseurDoublons-v$version-Setup.exe")
+} else {
+    Write-Host "== Installateur NON construit : Inno Setup 6 est absent." -ForegroundColor Yellow
+    Write-Host "   Installez-le (winget install JRSoftware.InnoSetup) puis relancez ce script." -ForegroundColor Yellow
+}
+
+# ---- archive du dossier complet (sur demande)
+if ($Zip) {
+    $zipf = Join-Path $racine "dist\ChasseurDoublons-v$version-win64.zip"
+    if (Test-Path $zipf) { Remove-Item $zipf -Force }
+    Write-Host "== Archive" -ForegroundColor Cyan
+    Compress-Archive -Path $app -DestinationPath $zipf -CompressionLevel Optimal
+    $produits += $zipf
+}
+
 Write-Host ""
-Write-Host "Termine : $zip ($mo Mo)" -ForegroundColor Green
-Write-Host "Essai   : dist\ChasseurDoublons\ChasseurDoublons.exe"
+Write-Host "Termine :" -ForegroundColor Green
+foreach ($f in $produits) { if (Test-Path $f) { Write-Host ("  {0}  ({1} Mo)" -f $f, [math]::Round((Get-Item $f).Length / 1MB)) -ForegroundColor Green } }
+Write-Host "Dossier complet : dist\ChasseurDoublons\  (l'exe n'y fonctionne qu'avec son dossier _internal)"
 exit 0

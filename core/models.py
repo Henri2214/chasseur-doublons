@@ -14,7 +14,7 @@ import threading
 import urllib.request
 import zipfile
 
-from .config import MODELS_DIR, WORKERS
+from .config import MODELS_DIR, MODELS_EXTRA, WORKERS
 
 try:
     import onnxruntime as ort
@@ -211,8 +211,10 @@ class LockedSession:
 
 
 class ModelManager:
-    def __init__(self, root=MODELS_DIR, db=None):
+    def __init__(self, root=MODELS_DIR, db=None, extra=None):
         self.root = str(root)
+        # dossiers de modèles livrés avec l'application, lus sur place (jamais modifiés)
+        self.extra = [str(p) for p in (MODELS_EXTRA if extra is None else extra)]
         self.db = db
         self.progress = {}          # name -> {done, total, status, error}
         self._sessions = {}
@@ -266,8 +268,19 @@ class ModelManager:
         return ok
 
     # ------------------------------------------------------------ état
-    def path(self, rel):
+    def _wpath(self, rel):
+        """Emplacement d'écriture (téléchargement, suppression) : toujours le dossier de l'utilisateur."""
         return os.path.join(self.root, *rel.split("/"))
+
+    def path(self, rel):
+        """Emplacement de lecture : dossier de l'utilisateur, sinon modèle livré avec l'application."""
+        p = self._wpath(rel)
+        if not os.path.isfile(p):
+            for d in self.extra:
+                q = os.path.join(d, *rel.split("/"))
+                if os.path.isfile(q):
+                    return q
+        return p
 
     def available(self, name):
         spec = REGISTRY[name]
@@ -355,7 +368,7 @@ class ModelManager:
         spec, prog = REGISTRY[name], self.progress[name]
         try:
             if "zip" in spec:
-                tmp = self.path(name + ".zip")
+                tmp = self._wpath(name + ".zip")
                 self._fetch(spec["zip"], tmp, spec.get("zip_size"), prog)
                 try:
                     with zipfile.ZipFile(tmp) as z:
@@ -364,7 +377,7 @@ class ModelManager:
                             m = members.get(os.path.basename(rel))
                             if not m:
                                 raise IOError("%s absent de l'archive" % rel)
-                            dest = self.path(rel)
+                            dest = self._wpath(rel)
                             with z.open(m) as src, open(dest + ".part", "wb") as out:
                                 shutil.copyfileobj(src, out, 1 << 20)
                             if size and os.path.getsize(dest + ".part") != size:
@@ -379,7 +392,7 @@ class ModelManager:
                     if os.path.isfile(self.path(rel)) and (not spec["files"][rel] or
                                                            os.path.getsize(self.path(rel)) == spec["files"][rel]):
                         continue
-                    self._fetch(url, self.path(rel), spec["files"][rel], prog)
+                    self._fetch(url, self._wpath(rel), spec["files"][rel], prog)
             prog["status"] = "done"
             with self._lock:   # forcer le rechargement des sessions
                 for k in list(self._sessions):
@@ -391,7 +404,7 @@ class ModelManager:
 
     def delete(self, name):
         for rel in REGISTRY[name]["files"]:
-            p = self.path(rel)
+            p = self._wpath(rel)           # un modèle livré avec l'application n'est jamais supprimé
             if os.path.isfile(p):
                 os.remove(p)
         with self._lock:

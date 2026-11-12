@@ -11,18 +11,30 @@ Dépôt : une seule version, à la racine. La procédure suivie pour chaque gros
 
 ## Application autonome (sans installer Python)
 
-Téléchargez `ChasseurDoublons-v…-win64.zip` dans les **Releases** du dépôt GitHub, décompressez, puis
-double-cliquez sur `ChasseurDoublons.exe`. Pour la construire vous-même :
+Dans les **Releases** du dépôt GitHub, deux fichiers au choix :
+
+| Fichier | Usage |
+|---|---|
+| `ChasseurDoublons-v…-Setup.exe` | **Installateur, à privilégier.** Un seul fichier qui contient tout (programme, bibliothèques, modèles d'IA libres). Installe sans droits d'administrateur, crée les raccourcis, démarre vite, se désinstalle proprement. |
+| `ChasseurDoublons-v…-portable.exe` | Un seul fichier, sans installation, à poser n'importe où. Il se décompresse à chaque lancement (démarrage plus lent) et télécharge les modèles la première fois. |
+
+Les données (index, miniatures, journaux, modèles téléchargés) sont dans `%LOCALAPPDATA%\ChasseurDoublons` :
+déplacer ou mettre à jour l'exécutable ne fait rien perdre. Pour tout garder sur une clé USB, créez un dossier
+`data` à côté de l'exécutable portable.
+
+Pour construire vous-même (Inno Setup 6 requis pour l'installateur : `winget install JRSoftware.InnoSetup`) :
 
 ```powershell
 .\tools\construire.ps1                      # utilise les modèles déjà présents dans models\
 .\tools\construire.ps1 -TelechargerModeles  # les télécharge d'abord
 ```
 
-Le résultat est dans `dist\`. Sur GitHub, pousser une étiquette (`git tag v2.6.0 ; git push origin v2.6.0`)
-lance la construction et publie l'archive dans les Releases. L'exécutable n'a été essayé ici que dans sa
-variante Linux (mêmes recette et code) ; la variante Windows est vérifiée par l'essai de démarrage du
-workflow GitHub.
+Le résultat est dans `dist\`. Le dossier `dist\ChasseurDoublons\` sert à fabriquer l'installateur : son
+`ChasseurDoublons.exe` **ne fonctionne pas sorti de ce dossier** (il a besoin de `_internal\`). Sur GitHub,
+pousser une étiquette (`git tag v2.9.0 ; git push origin v2.9.0`) lance la construction, installe réellement
+l'installateur, lance la version portable seule dans un dossier vide, puis publie les deux fichiers.
+Les exécutables ne sont pas signés : Windows SmartScreen peut afficher « Windows a protégé votre ordinateur »
+au premier lancement (Informations complémentaires → Exécuter quand même).
 
 ## Installation et lancement
 

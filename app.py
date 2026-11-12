@@ -53,6 +53,19 @@ def alerte(message):
             pass
 
 
+def ouvrir_page(url):
+    """Ouvre la page dans le navigateur par défaut (deux moyens : certains postes n'en acceptent qu'un)."""
+    try:
+        if webbrowser.open(url):
+            return
+    except Exception:
+        pass
+    try:
+        os.startfile(url)                  # Windows uniquement
+    except Exception:
+        print("Impossible d'ouvrir le navigateur : ouvrez %s à la main." % url)
+
+
 def deja_lance(port):
     """L'application répond-elle déjà sur ce port ?"""
     try:
@@ -122,8 +135,14 @@ def _main(argv=None):
     if a.host == "127.0.0.1":
         if deja_lance(a.port):          # déjà en route : on rouvre simplement la page
             print("Déjà lancé sur le port %d : ouverture de la page." % a.port)
+            try:
+                if os.environ.get("_PYI_SPLASH_IPC"):
+                    import pyi_splash
+                    pyi_splash.close()
+            except Exception:
+                pass
             if not a.no_browser:
-                webbrowser.open("http://127.0.0.1:%d" % a.port)
+                ouvrir_page("http://127.0.0.1:%d" % a.port)
             return 0
         libre = port_libre(a.port)
         if libre != a.port:
@@ -154,8 +173,15 @@ def _main(argv=None):
         app.config["ALLOW_ANY_HOST"] = True
     url = "http://127.0.0.1:%d" % a.port
     print("Chasseur de doublons %s -> %s" % (__version__, url))
+    print("Données : %s | Modèles : %s" % (state.data_dir, state.mm.root))
+    try:                                   # écran de démarrage de l'exécutable en un seul fichier
+        if os.environ.get("_PYI_SPLASH_IPC"):
+            import pyi_splash
+            pyi_splash.close()
+    except Exception:
+        pass
     if not a.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        threading.Timer(1.0, lambda: ouvrir_page(url)).start()
     if a.arret_auto > 0 and not a.no_browser:
         threading.Thread(target=surveiller, args=(state, a.arret_auto), daemon=True).start()
     if sans_console():
