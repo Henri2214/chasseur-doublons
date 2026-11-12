@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.11.0 - 2026-11-12
+### Modifié
+- **Miniatures et aperçu EXACTS des documents bureautiques.** Word, Excel, PowerPoint et OpenDocument sont
+  convertis en PDF par **Microsoft Office** (piloté sans fenêtre) ou **LibreOffice**, installé sur le PC : la
+  miniature est la vraie première page et l'aperçu affiche le document tel qu'il est (mise en page, images,
+  tableaux). Conversion faite pendant l'analyse (option « Rendu exact des documents », environ une seconde par
+  document, une seule fois) ou à la demande en arrière-plan ; les PDF sont gardés dans `data\apercus`.
+  Sans logiciel de rendu, ou si la conversion échoue, le texte extrait est affiché avec la mention
+  **« TEXTE SEUL »** : il n'est plus jamais présenté comme le document. Réglages : choix du moteur et bouton
+  « Tester la conversion ».
+- **Documents proches présentés par PAIRES.** Chaque paire compare deux documents précis, avec sa note ; plus de
+  gros bloc « A ressemble à B qui ressemble à C ». Les fichiers au contenu strictement identique restent
+  réunis en un seul groupe « MÊME CONTENU » (ce sont les mêmes documents). Un document figure au plus dans ses
+  5 paires les plus ressemblantes ; nouveau tri « les plus ressemblants ».
+### Ajouté
+- **« Comparer les deux »** sur chaque paire : les deux textes côte à côte, lignes modifiées, ajoutées et
+  supprimées surlignées, avec l'option « Différences seulement ».
+### Corrigé
+- Un fichier présent dans deux groupes affichait dans le premier les étiquettes du second.
+
 ## 2.10.1 - 2026-11-12
 ### Modifié
 - **Fermer le navigateur arrête l'application.** À la fermeture de l'onglet ou de la fenêtre, la page prévient

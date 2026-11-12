@@ -198,14 +198,20 @@ Tous les fichiers peuvent être dédoublonnés. Cochez « Documents » et « Aut
 | IDENTIQUES | mêmes octets (SHA-256), n'importe quel type de fichier | certaine |
 | MÊME CONTENU | même texte dans des fichiers différents : document ré-enregistré, .docx exporté en .pdf / .odt | texte identique, mise en forme et images non comparées |
 | MÊME COURRIEL | même identifiant de message (.eml / .msg, exports multiples) | certaine pour le message, pièces jointes non comparées |
-| VERSIONS PROCHES | part du texte commune ≥ seuil (80 % par défaut, réglable) | à relire avant de supprimer |
+| PAIRE À COMPARER | deux documents dont la part de texte commune ≥ seuil (80 % par défaut, réglable) | à comparer avant de supprimer |
 
 Formats dont le contenu est lu : Word (.docx, .docm, .dotx, .doc), OpenDocument (.odt, .ods, .odp), RTF, Excel
 (.xlsx, .xlsm, .xls), PowerPoint (.pptx, .ppsx, .ppt approximatif), PDF (OCR des PDF scannés si « Texte » n'est
 pas sur « aucun »), texte (.txt, .md, .csv, .log, .html), courriels (.eml, .msg). Tous les autres fichiers
 (archives, .pst, .mbox, musique, programmes…) sont comparés bit à bit.
 
-Le texte est indexé : l'onglet **Rechercher** retrouve un document ou un courriel par un mot de son contenu.
+**Rendu exact.** Pour afficher un document Word, Excel, PowerPoint ou OpenDocument tel qu'il est réellement,
+l'application le fait convertir en PDF par Microsoft Office ou LibreOffice (l'un des deux doit être installé ;
+choix et essai dans Réglages). La miniature est alors la vraie première page. Sans ce logiciel, le texte
+extrait est affiché avec la mention « TEXTE SEUL ». Les documents proches sont présentés **par paires**, avec un
+bouton « Comparer les deux » qui affiche les deux textes côte à côte, différences surlignées.
+
+Le texte est indexé : l'onglet **Explorer** retrouve un document ou un courriel par un mot de son contenu.
 Un clic sur un document affiche son texte ; « Similaires » liste les documents au texte voisin.
 « MÊME CONTENU » compare le texte seul : deux documents au même texte mais aux images différentes sont
 regroupés. Vérifiez avant de supprimer.

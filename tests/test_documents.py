@@ -7,7 +7,7 @@ from email.message import EmailMessage
 
 import pytest
 
-from core import docs, dupes, search, similar
+from core import docs, dupes, render, search, similar
 from core.web import create_app
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -34,9 +34,17 @@ def _x(s):
 def make_docx(path, paras, comment="", donnees=None, entete=None):
     body = "".join("<w:p><w:r><w:t>%s</w:t></w:r></w:p>" % _x(p) for p in paras)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats'
+                   '.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-'
+                   'package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName='
+                   '"/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.'
+                   'document.main+xml"/></Types>')
+        z.writestr("_rels/.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats'
+                   '.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/'
+                   'officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
         z.writestr("docProps/core.xml", "<c>%s</c>" % comment)
-        z.writestr("word/document.xml", '<?xml version="1.0"?><w:document><w:body>%s</w:body></w:document>' % body)
+        z.writestr("word/document.xml", '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.'
+                   'openxmlformats.org/wordprocessingml/2006/main"><w:body>%s</w:body></w:document>' % body)
         if entete:
             z.writestr("word/header1.xml", "<w:hdr><w:p><w:r><w:t>%s</w:t></w:r></w:p></w:hdr>" % _x(entete))
         if donnees:
@@ -166,24 +174,50 @@ def test_groupes_documents(dossier, state):
     assert st["docs_new"] == 11
     gs = dupes.compute(state.db, [str(dossier)], {"others": True})
     by = {frozenset(names(state, g)): g for g in gs}
-    contrat = next(g for n, g in by.items() if "contrat.docx" in n)
-    assert names(state, contrat) == {"contrat.docx", "contrat - Copie.docx", "contrat_reenregistre.docx",
-                                     "contrat.odt", "contrat_v2.docx"}
-    assert contrat["kind"] == "proche" and contrat["media"] == "doc"
-    sc = {r["name"]: m["score"] for m in contrat["members"]
-          for r in state.db.q("SELECT name FROM files WHERE id=?", (m["id"],))}
-    assert 80 <= min(sc.values()) < 100 and max(sc.values()) == 100
+    # même texte : UN groupe, quel que soit le nombre de copies
+    meme = by[frozenset({"contrat.docx", "contrat - Copie.docx", "contrat_reenregistre.docx", "contrat.odt"})]
+    assert meme["kind"] == "contenu" and all(m["score"] == 100 for m in meme["members"])
+    # version proche : une PAIRE (la v2 et un seul exemplaire du contrat), jamais un bloc
+    paires = [g for g in gs if g["kind"] == "proche"]
+    assert len(paires) == 1 and len(paires[0]["members"]) == 2
+    assert "contrat_v2.docx" in names(state, paires[0])
+    assert sorted(m["score"] for m in paires[0]["members"])[0] in range(80, 100)
     mail = next(g for n, g in by.items() if "devis.eml" in n)
     assert mail["kind"] == "mail" and names(state, mail) == {"devis.eml", "devis (1).eml"}   # la relance est à part
     assert by[frozenset({"a.bin", "b.dat"})]["kind"] == "exact"
     assert not any("recette.docx" in n for n in by)
-    # seuil plus strict : la v2 sort du groupe, qui devient « même contenu »
+    # seuil plus strict : plus de paire, le groupe « même contenu » reste
     gs = dupes.compute(state.db, [str(dossier)], {"doc_thr": 0.97})
-    g = next(g for g in gs if "contrat.docx" in names(state, g))
-    assert g["kind"] == "contenu" and "contrat_v2.docx" not in names(state, g)
+    assert [g["kind"] for g in gs if "contrat.docx" in names(state, g)] == ["contenu"]
+    assert not any("contrat_v2.docx" in names(state, g) for g in gs)
     # module désactivé : il ne reste que les copies bit à bit
     gs = dupes.compute(state.db, [str(dossier)], {"doc_content": False})
     assert [g["kind"] for g in gs] == ["exact"]
+
+
+def test_paires_jamais_de_bloc(tmp_path, state):
+    """v1 ~ v2 ~ v3 : trois comparaisons deux à deux, chacune avec sa note ; pas de groupe de trois."""
+    root = tmp_path / "versions"
+    root.mkdir()
+    v = list(PHRASES)
+    make_docx(root / "v1.docx", v)
+    v2 = list(v)
+    v2[2] = "Phrase entièrement réécrite pour la deuxième version du document de travail."
+    make_docx(root / "v2.docx", v2)
+    v3 = list(v2)
+    v3[5] = "Encore une autre phrase modifiée, cette fois dans la troisième version."
+    make_docx(root / "v3.docx", v3)
+    state.scanner.scan_sync(str(root))
+    gs = dupes.compute(state.db, [str(root)], {"doc_thr": 0.6})
+    assert gs and all(g["kind"] == "proche" and len(g["members"]) == 2 for g in gs)
+    assert {frozenset(names(state, g)) for g in gs} == {frozenset({"v1.docx", "v2.docx"}),
+                                                         frozenset({"v2.docx", "v3.docx"}),
+                                                         frozenset({"v1.docx", "v3.docx"})}
+    a = state.db.one("SELECT id FROM files WHERE name='v1.docx'")["id"]
+    b = state.db.one("SELECT id FROM files WHERE name='v2.docx'")["id"]
+    c = docs.compare(state.db, a, b)
+    modif = [r for r in c["rows"] if r[0] != "="]
+    assert c["diff"] == len(modif) and 1 <= len(modif) <= 4 and any("deuxième version" in (r[2] or "") for r in modif)
 
 
 def test_modele_rempli_par_donnees_liees(tmp_path, state):
@@ -199,15 +233,15 @@ def test_modele_rempli_par_donnees_liees(tmp_path, state):
     assert "Martin SAS" in docs.extract(str(root / "SAV2 - MARTIN.docx"))["text"]
     state.scanner.scan_sync(str(root))
     gs = dupes.compute(state.db, [str(root)], {})
-    assert not [g for g in gs if g["kind"] in ("contenu", "exact")]      # aucune fausse « copie »
-    sav = next(g for g in gs if "SAV2 - MARTIN.docx" in names(state, g))
-    assert sav["kind"] == "proche"
-    par_nom = {state.db.one("SELECT name FROM files WHERE id=?", (m["id"],))["name"]: m for m in sav["members"]}
-    # les deux fiches Dupont sont repérées comme vraies copies ; la fiche Martin non
-    assert par_nom["SAV1 - DUPONT.docx"]["sub"] == par_nom["SAV1 - DUPONT (1).docx"]["sub"] is not None
-    assert par_nom["SAV2 - MARTIN.docx"]["sub"] is None
-    lettres = next(g for g in gs if "lettre A.docx" in names(state, g))
-    assert lettres["kind"] == "proche" and all(m["score"] < 100 for m in lettres["members"] if not m["ref"])
+    # seules les deux fiches Dupont ont le même contenu
+    assert [names(state, g) for g in gs if g["kind"] in ("contenu", "exact")] == \
+        [{"SAV1 - DUPONT.docx", "SAV1 - DUPONT (1).docx"}]
+    # les autres fiches du modèle ne sont que des paires « versions proches », jamais à 100 %
+    paires = [g for g in gs if g["kind"] == "proche"]
+    assert paires and all(len(g["members"]) == 2 for g in paires)
+    assert any("SAV2 - MARTIN.docx" in names(state, g) for g in paires)
+    assert any(names(state, g) == {"lettre A.docx", "lettre B.docx"} for g in paires)
+    assert all(m["score"] < 100 for g in paires for m in g["members"] if not m["ref"])
 
 
 def test_relecture_quand_la_methode_change(dossier, state):
@@ -262,9 +296,12 @@ def test_api_documents_et_quitter(dossier, state):
         if c.get("/api/status").get_json()["status"] != "running":
             break
         time.sleep(0.05)
-    assert c.post("/api/dupes", json={"options": {"others": True}}, headers=h).get_json()["groups"] == 3
+    assert c.post("/api/dupes", json={"options": {"others": True}}, headers=h).get_json()["groups"] == 4
     g = c.get("/api/groups?kind=proche").get_json()
-    assert g["total"] == 1 and all(f["words"] > 100 for f in g["groups"][0]["files"])
+    assert g["total"] == 1 and len(g["groups"][0]["files"]) == 2 and all(f["words"] > 100 for f in g["groups"][0]["files"])
+    ida, idb = [f["id"] for f in g["groups"][0]["files"]]
+    cmp_ = c.get("/api/compare?a=%d&b=%d" % (ida, idb)).get_json()
+    assert cmp_["diff"] >= 1 and cmp_["same"] > 20
     fid = state.db.one("SELECT id FROM files WHERE name='devis.eml'")["id"]
     info = c.get("/api/info?id=%d" % fid).get_json()["doc"]
     assert info["family"] == "Courriel" and "pare-feu" in info["text"] and info["extra"]["a"] == "client@example.com"
@@ -365,3 +402,80 @@ def test_fermeture_du_navigateur_arrete_l_application(state):
     # mode sans page (--no-browser) : jamais d'arrêt sur fermeture
     app.config["ARRET_FERMETURE"] = False
     assert c.post("/api/bye?p=z&t=" + state.token).get_json()["arret"] is False
+
+
+def _client(state):
+    app = create_app(state)
+    app.testing = True
+    c = app.test_client()
+    c.environ_base["HTTP_HOST"] = "127.0.0.1:8765"
+    return c
+
+
+def test_sans_moteur_la_miniature_dit_texte_seul(dossier, state):
+    """Aucun logiciel de rendu : on montre le texte, sans jamais le faire passer pour le document."""
+    state.db.set_setting("doc_preview_engine", "aucun")
+    state.scanner.scan_sync(str(dossier), {"doc_preview": True})
+    state.scope.reset([str(dossier)])
+    c = _client(state)
+    fid = state.db.one("SELECT id FROM files WHERE name='contrat.docx'")["id"]
+    assert c.get("/api/caps").get_json()["caps"]["doc_engine"] == ""
+    t = c.get("/api/thumb?id=%d&s=400" % fid)
+    assert t.mimetype == "image/jpeg" and "no-store" not in (t.headers.get("Cache-Control") or "")
+    d = c.get("/api/info?id=%d" % fid).get_json()["doc"]
+    assert d["convertible"] and d["apercu"] == "" and d["moteur"] == ""
+    assert c.get("/api/apercu?id=%d" % fid).status_code == 404
+    from PIL import Image
+    import io
+    px = Image.open(io.BytesIO(t.data)).convert("RGB")
+    assert px.getpixel((150, 392))[2] < 235             # bandeau jaune « TEXTE SEUL » en pied d'image
+
+
+def test_groupes_page_fichier_dans_deux_groupes(dossier, state):
+    """Un fichier présent dans un groupe « même contenu » ET dans une paire garde ses valeurs dans chacun."""
+    state.scanner.scan_sync(str(dossier))
+    state.scope.reset([str(dossier)])
+    state.result.set(dupes.compute(state.db, [str(dossier)], {}), {})
+    gs = dupes.page(state.db, state.result, per=50)["groups"]
+    meme = next(g for g in gs if g["kind"] == "contenu")
+    assert sum(1 for f in meme["files"] if f["ref"]) == 1 and all(f["score"] == 100 for f in meme["files"])
+    paire = next(g for g in gs if g["kind"] == "proche")
+    assert sorted(f["ref"] for f in paire["files"]) == [False, True]
+
+
+@pytest.mark.skipif(not render.engines(), reason="ni Microsoft Office ni LibreOffice sur cette machine")
+def test_rendu_exact_des_documents(dossier, state):
+    st = state.scanner.scan_sync(str(dossier), {"doc_preview": True})
+    assert st["previews"] >= 5                          # les .docx et le .rtf (les faux .odt / .xlsx du jeu d'essai sont refusés)
+    state.scope.reset([str(dossier)])
+    c = _client(state)
+    f = state.db.one("SELECT id, path, mtime, size FROM files WHERE name='contrat.docx'")
+    assert state.previews.state(f["path"], f["mtime"], f["size"]) == "exact"
+    pdf = c.get("/api/apercu?id=%d" % f["id"])
+    assert pdf.mimetype == "application/pdf" and pdf.data[:5] == b"%PDF-"
+    if docs.PDF:                                        # le PDF produit contient bien le texte du document
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as fh:
+            fh.write(pdf.data)
+        assert "tribunal de commerce de Poitiers" in docs.extract(fh.name)["text"]
+        os.unlink(fh.name)
+    t = c.get("/api/thumb?id=%d&s=400" % f["id"])
+    assert t.mimetype == "image/jpeg" and "no-store" not in (t.headers.get("Cache-Control") or "")
+    assert c.get("/api/info?id=%d" % f["id"]).get_json()["doc"]["apercu"] == "exact"
+    ids = ",".join(str(r["id"]) for r in state.db.q("SELECT id FROM files WHERE kind='doc'"))
+    assert f["id"] in c.get("/api/apercus?ids=" + ids).get_json()["ready"]
+    assert state.scanner.scan_sync(str(dossier), {"doc_preview": True}).get("previews") is None   # rien à refaire
+    ok, msg, _ = state.previews.self_test()
+    assert ok, msg
+
+
+def test_document_illisible_par_le_moteur(tmp_path, state):
+    if not render.engines():
+        pytest.skip("aucun moteur")
+    root = tmp_path / "casse"
+    root.mkdir()
+    (root / "faux.docx").write_bytes(b"PK\x03\x04 pas un vrai document" * 10)
+    state.scanner.scan_sync(str(root), {"doc_preview": True})
+    f = state.db.one("SELECT path, mtime, size FROM files")
+    assert state.previews.state(f["path"], f["mtime"], f["size"]) in ("echec", "exact")
+    assert not state.previews.request(dict(f, id=1))    # pas de nouvelle tentative en boucle

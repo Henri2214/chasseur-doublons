@@ -741,12 +741,19 @@ def links(db, ids, thr=0.8, progress=None):
     return out
 
 
-def groups(db, ids, thr=0.8, progress=None):
-    """Groupes de documents au contenu identique ou voisin : [(type, [(id, note, repère), ...])], référence en
-    tête ; deux membres de même repère ont exactement le même contenu.
+PAIRS_PER_FILE = 5      # un même document apparaît au plus dans ses 5 paires les plus ressemblantes
+PAIRS_MAX = 5000
 
-    Les versions successives d'un même document sont réunies de proche en proche (v1 ~ v2 ~ v3) ; la note
-    affichée est toujours la ressemblance avec la référence du groupe."""
+
+def groups(db, ids, thr=0.8, progress=None):
+    """Regroupements de documents : [(type, [(id, note, repère), ...])], référence en tête.
+
+    * "mail" / "contenu" : fichiers au contenu strictement identique — un groupe par contenu, quel que soit
+      le nombre de copies (ce sont les mêmes documents) ;
+    * "proche" : versions voisines, présentées PAR PAIRES. Chaque paire est une comparaison précise entre deux
+      documents, avec sa propre note ; on ne fabrique jamais un gros bloc « A ressemble à B qui ressemble à C ».
+      Quand un contenu existe en plusieurs copies identiques, une seule d'entre elles figure dans la paire."""
+    lk = links(db, ids, thr, progress)
     parent = {}
 
     def find(x):
@@ -754,49 +761,80 @@ def groups(db, ids, thr=0.8, progress=None):
             parent[x] = parent[parent[x]]
             x = parent[x]
         return x
-    for a, b, _, _kind in links(db, ids, thr, progress):
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[ra] = rb
+    near = []
+    for a, b, s_, kind in lk:
+        if kind == "proche":
+            near.append((a, b, s_))
+        else:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+    need = set(parent) | {x for a, b, _ in near for x in (a, b)}
+    info = {}
+    need = list(need)
+    for i in range(0, len(need), 900):
+        ch = need[i:i + 900]
+        for r in db.q("SELECT d.file_id, d.chash, d.words, d.mid, f.size, f.mtime FROM doctext d "
+                      "JOIN files f ON f.id=d.file_id WHERE d.file_id IN (%s)" % ",".join("?" * len(ch)), ch):
+            info[r["file_id"]] = r
+
+    def rang(m):
+        return (info[m]["words"] or 0, info[m]["mtime"], info[m]["size"])
+    out = []
     comps = {}
     for x in list(parent):
-        comps.setdefault(find(x), []).append(x)
-    out = []
+        if x in info:
+            comps.setdefault(find(x), []).append(x)
     for mem in comps.values():
         if len(mem) < 2:
             continue
-        info = {}
-        for i in range(0, len(mem), 900):
-            ch = mem[i:i + 900]
-            for r in db.q("SELECT d.file_id, d.chash, d.sketch, d.words, d.mid, f.size, f.mtime FROM doctext d "
-                          "JOIN files f ON f.id=d.file_id WHERE d.file_id IN (%s)" % ",".join("?" * len(ch)), ch):
-                info[r["file_id"]] = r
-        mem = [m for m in mem if m in info]
-        if len(mem) < 2:
-            continue
-        ref = max(mem, key=lambda m: (info[m]["words"] or 0, info[m]["mtime"], info[m]["size"]))
-        rs = unpack_sketch(info[ref]["sketch"])
-        scored = []
-        for m in mem:
-            if m == ref:
-                continue
-            same = info[m]["chash"] == info[ref]["chash"] or (info[m]["mid"] and info[m]["mid"] == info[ref]["mid"])
-            scored.append((m, 100.0 if same else 100.0 * jaccard(rs, unpack_sketch(info[m]["sketch"]))))
-        scored.sort(key=lambda t: -t[1])
-        # fichiers au contenu strictement identique à l'intérieur du groupe : même repère
-        cls = {}
-        for m in mem:
-            cls.setdefault(info[m]["mid"] or info[m]["chash"], []).append(m)
-        mark = {m: "c%d" % n for n, g in enumerate(cls.values()) if len(g) > 1 for m in g}
+        mem.sort(key=rang, reverse=True)
         mids = {info[m]["mid"] for m in mem}
-        if len(mids) == 1 and None not in mids:
-            kind = "mail"
-        elif len({info[m]["chash"] for m in mem}) == 1:
-            kind = "contenu"
-        else:
-            kind = "proche"
-        out.append((kind, [(m, sc, mark.get(m)) for m, sc in [(ref, 100.0)] + scored]))
+        kind = "mail" if len(mids) == 1 and None not in mids else "contenu"
+        out.append((kind, [(m, 100.0, None) for m in mem]))
+    near.sort(key=lambda t: -t[2])
+    count, n = {}, 0
+    for a, b, s_ in near:
+        if a not in info or b not in info:
+            continue
+        if count.get(a, 0) >= PAIRS_PER_FILE or count.get(b, 0) >= PAIRS_PER_FILE:
+            continue
+        count[a] = count.get(a, 0) + 1
+        count[b] = count.get(b, 0) + 1
+        ref, autre = (a, b) if rang(a) >= rang(b) else (b, a)
+        out.append(("proche", [(ref, 100.0, None), (autre, s_, None)]))
+        n += 1
+        if n >= PAIRS_MAX:
+            break
     return out
+
+
+def compare(db, a, b, max_lines=3000):
+    """Comparaison ligne à ligne du texte de deux documents : [(état, texte A, texte B)], état parmi
+    "=" (identique), "~" (modifié), "-" (seulement dans A), "+" (seulement dans B)."""
+    import difflib
+
+    def lines(fid):
+        r = db.one("SELECT text FROM doctext WHERE file_id=?", (fid,))
+        return [x.strip() for x in ((r["text"] if r else "") or "").split("\n") if x.strip()][:max_lines]
+    la, lb = lines(a), lines(b)
+    sm = difflib.SequenceMatcher(None, [fold(x) for x in la], [fold(x) for x in lb], autojunk=False)
+    out = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            out += [("=", la[i], lb[j1 + (i - i1)]) for i in range(i1, i2)]
+        elif tag == "replace":
+            n = max(i2 - i1, j2 - j1)
+            for k in range(n):
+                x = la[i1 + k] if i1 + k < i2 else None
+                y = lb[j1 + k] if j1 + k < j2 else None
+                out.append(("~" if x is not None and y is not None else "-" if y is None else "+", x, y))
+        elif tag == "delete":
+            out += [("-", la[i], None) for i in range(i1, i2)]
+        else:
+            out += [("+", None, lb[j]) for j in range(j1, j2)]
+    same = sum(1 for t in out if t[0] == "=")
+    return {"rows": out, "same": same, "diff": len(out) - same, "ratio": round(sm.ratio(), 3)}
 
 
 def similar_docs(db, file_id, thr=0.3, limit=2000):
@@ -866,8 +904,9 @@ def _font(size, bold=False):
     return _FONTS[key]
 
 
-def text_thumbnail(text, ext, size=400, title=None):
-    """Image « première page » : bandeau de couleur du type de document, puis le début du texte."""
+def text_thumbnail(text, ext, size=400, title=None, note=None):
+    """Image « texte seul » : bandeau de couleur du type de document, puis le début du texte extrait.
+    `note` est écrite en pied d'image pour qu'on ne la prenne pas pour le rendu exact du document."""
     from PIL import Image, ImageDraw
     H = int(size)
     W = int(H * 0.76)
@@ -916,5 +955,10 @@ def text_thumbnail(text, ext, size=400, title=None):
                 break
             d.text((margin, y), ln, fill=(55, 62, 78), font=f)
             y += lh
+    if note and H >= 120:
+        fn = _font(max(7, H // 40), True)
+        hb = int(fn.size * 1.9) if hasattr(fn, "size") else 14
+        d.rectangle([0, H - hb, W, H], fill=(255, 244, 214))
+        d.text((margin, H - hb + hb * 0.2), note, fill=(150, 90, 0), font=fn)
     d.rectangle([0, 0, W - 1, H - 1], outline=(190, 198, 212))
     return im

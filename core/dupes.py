@@ -378,14 +378,16 @@ def compute(db, roots, opts, progress=None):
         used.update(ks)
     for gk, mem in doc_groups:
         ml = []
-        for n, (k, s_, c) in enumerate(mem):
-            for j, f in enumerate(reps[k]):
-                m = member(f, k, s_, n == 0 and j == 0)
-                if c is not None and gk == "proche":
-                    m["sub"] = c          # même contenu que les autres membres de même repère
+        if gk == "proche":        # paire : un fichier de chaque côté (les copies exactes ont leur propre groupe)
+            for n, (k, s_, c) in enumerate(mem):
+                m = member(reps[k][0], k, s_, n == 0)
+                m["sub"] = None
                 ml.append(m)
+        else:
+            for n, (k, s_, c) in enumerate(mem):
+                ml += [member(f, k, s_, n == 0 and j == 0) for j, f in enumerate(reps[k])]
+            used.update(k for k, _, _ in mem)
         groups.append({"id": len(groups) + 1, "kind": gk, "media": "doc", "members": ml, "nodate": False})
-        used.update(k for k, _, _ in mem)
     for k, g in enumerate(reps):
         if len(g) > 1 and k not in used:
             groups.append({"id": len(groups) + 1, "kind": "exact", "media": F[g[0]]["kind"], "nodate": False,
@@ -481,6 +483,8 @@ def page(db, result, page_no=1, per=20, sort="waste", kind="all"):
         gs.sort(key=lambda g: -len(g["members"]))
     elif sort == "name":
         gs.sort(key=lambda g: g["id"])
+    elif sort == "score":          # les plus ressemblants d'abord (copies exactes en tête)
+        gs.sort(key=lambda g: -min([m["score"] if m["score"] is not None else 101 for m in g["members"]] or [0]))
     else:
         gs.sort(key=lambda g: -waste(g))
     total = len(gs)
@@ -502,6 +506,7 @@ def page(db, result, page_no=1, per=20, sort="waste", kind="all"):
         for m in g["members"]:
             f = info.get(m["id"])
             if f:
+                f = dict(f)            # un même fichier peut figurer dans plusieurs groupes (contenu + paire)
                 f.update(m)
                 f["folder"] = os.path.dirname(f["path"])
                 files.append(f)

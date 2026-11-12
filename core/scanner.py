@@ -26,7 +26,7 @@ RESET_COLS = ("status='new', error=NULL, w=NULL, h=NULL, taken=NULL, cam=NULL, h
               "done_clip=0, done_quality=0, done_doc=0")
 
 DEFAULT_OPTS = {
-    "images": True, "videos": True, "documents": True, "others": False, "doc_text": True, "min_kb": 0, "vframes": 12, "skip_cloud": True,
+    "images": True, "videos": True, "documents": True, "others": False, "doc_text": True, "doc_preview": False, "min_kb": 0, "vframes": 12, "skip_cloud": True,
     "exact": True, "visual": True, "faces": False, "objects": False, "ocr": "aucun", "clip": False,
     "quality": True, "face_engine": "opencv", "face_det": "equilibre", "yolox": "yolox_s",
 }
@@ -67,6 +67,7 @@ class Scanner:
         self.cancel = False
         self._engines = {}
         self._elock = threading.Lock()
+        self.previews = None          # rendu exact des documents (fourni par l'application)
 
     # ------------------------------------------------------------ outils
     def _phase(self, name, total=0):
@@ -117,6 +118,8 @@ class Scanner:
                 self.db.set_setting("analyse_en_cours", {"gpu": bool(self.mm.gpu_providers())})
             if o.get("documents") and o.get("doc_text", True):
                 self._documents(root, o, stats)
+            if o.get("documents") and o.get("doc_preview") and self.previews is not None:
+                self._previews(root, o, stats)
             self._analyse(root, o, stats)
             if o.get("faces") and stats.get("faces_new"):
                 self._phase("Regroupement des visages en personnes")
@@ -378,6 +381,30 @@ class Scanner:
                     n_text += 1
             c.commit()
         stats["docs_text"] = n_text
+
+    # ------------------------------------------------------------ rendu exact des documents
+    def _previews(self, root, o, stats):
+        """Convertit en PDF (Office / LibreOffice) les documents bureautiques qui n'ont pas encore leur rendu."""
+        pv = self.previews
+        if not pv.engine():
+            return
+        lo, hi = prefix_range(root)
+        rows = [dict(r) for r in self.db.q("SELECT id, path, mtime, size FROM files WHERE path >= ? AND path < ? "
+                                           "AND kind='doc' AND size >= ?", (lo, hi, max(1, int(o.get("min_kb", 0)) * 1024)))]
+        todo = [r for r in rows if pv.wanted(r["path"], r["size"]) and not pv.state(r["path"], r["mtime"], r["size"])]
+        if not todo:
+            return
+        self._phase("Rendu exact des documents (%s)" % pv.engine(), len(todo))
+        tt = time.time()
+        ok = 0
+        for i in range(0, len(todo), 12):
+            if self.cancel:
+                raise Cancelled()
+            res = pv.convert(todo[i:i + 12], should_stop=lambda: self.cancel)
+            ok += sum(1 for v in res.values() if v is None)
+            self.state["done"] = min(len(todo), i + 12)
+        stats["previews"] = ok
+        stats["stages"]["rendu_documents"] = {"n": len(todo), "s": round(time.time() - tt, 3)}
 
     # ------------------------------------------------------------ analyse des médias
     def _analyse(self, root, o, stats):

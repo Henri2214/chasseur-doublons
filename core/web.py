@@ -6,6 +6,7 @@ indexés et dans le périmètre de la session.
 """
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import string
@@ -15,7 +16,7 @@ import time
 from flask import Flask, Response, abort, jsonify, request, send_file
 from PIL import Image, ImageOps
 
-from . import __version__, actions, calib, docs, dupes, persons, search, similar
+from . import __version__, actions, calib, docs, dupes, persons, render, search, similar
 from .config import DATA_DIR, IMG_EXT, RIGOR_LABELS, WEB_EXT
 from .db import Database
 from .imaging import HEIF, RAW, cv2, load_small
@@ -40,6 +41,8 @@ class State:
                                                 "brutalement alors qu'il était utilisé. Calcul sur le processeur.")
         self.mm.gpu_note = self.db.get_setting("gpu_note", "") if not self.mm.use_gpu() else ""
         self.scanner = Scanner(self.db, self.mm)
+        self.previews = render.Previews(self.data_dir, self.db)     # rendu exact des documents bureautiques
+        self.scanner.previews = self.previews
         self.scope = Scope()
         self.scope.reset(self.known_roots())     # les dossiers déjà analysés restent consultables
         self.result = dupes.DupeResult()
@@ -131,6 +134,7 @@ def create_app(state=None):
     def arreter(attendre=8):
         """Arrêt complet : analyse interrompue, index refermé proprement, processus terminé."""
         S.scanner.cancel = True
+        S.previews.stop = True
         t0 = time.time()
         while S.scanner.state["status"] == "running" and time.time() - t0 < attendre:
             time.sleep(0.1)
@@ -190,6 +194,8 @@ def create_app(state=None):
             "ocr": importlib.util.find_spec("rapidocr_onnxruntime") is not None,
             "onnx": importlib.util.find_spec("onnxruntime") is not None,
             "providers": providers(), "fts": S.db.fts,
+            "doc_engines": S.previews.available(), "doc_engine": S.previews.engine(),
+            "doc_engine_choice": S.db.get_setting("doc_preview_engine", "auto"),
             "gpu": (S.mm.gpu_providers() or [""])[0], "gpu_available": next((p for p in providers() if p != "CPUExecutionProvider"), ""),
             "use_gpu": S.mm.use_gpu(), "gpu_note": S.mm.gpu_note,
             "gpu_devices": gpu_adapters(), "gpu_device": S.db.get_setting("gpu_device", "auto"),
@@ -230,6 +236,9 @@ def create_app(state=None):
             S.scanner._engines.clear()
             S._face_engines.clear()
             S._clip = None
+        if d.get("doc_preview_engine") in ("auto", "office", "libreoffice", "aucun"):
+            S.db.set_setting("doc_preview_engine", d["doc_preview_engine"])
+            S.previews.forget_failures()      # autre moteur : on retentera les documents en échec
         if d.get("face_engine") in ("insightface", "opencv"):
             S.db.set_setting("face_engine", d["face_engine"])
         return jsonify(settings=_settings())
@@ -343,6 +352,17 @@ def create_app(state=None):
         return jsonify(dupes.page(S.db, S.result, int(a.get("page", 1)), min(500, int(a.get("per", 20))),
                                   a.get("sort", "waste"), a.get("kind", "all")))
 
+    @app.get("/api/compare")
+    def api_compare():
+        """Texte de deux documents, ligne à ligne, avec les différences."""
+        a, b = int(request.args.get("a", 0)), int(request.args.get("b", 0))
+        fa, fb = file_row(a), file_row(b)
+        r = docs.compare(S.db, a, b)
+        r.update(a={"id": a, "name": os.path.basename(fa["path"])}, b={"id": b, "name": os.path.basename(fb["path"])},
+                 truncated=len(r["rows"]) > 4000)
+        r["rows"] = r["rows"][:4000]
+        return jsonify(r)
+
     @app.get("/api/group_ids")
     def api_group_ids():
         """Identifiants et métadonnées légères de tous les groupes (pour la sélection automatique)."""
@@ -438,12 +458,12 @@ def create_app(state=None):
         except Exception:  # noqa
             return None
 
-    def doc_page(fid, ext, s):
+    def doc_page(fid, ext, s, note=None):
         d = S.db.one("SELECT substr(text, 1, 6000) t, title FROM doctext WHERE file_id=?", (fid,))
         if not d or not (d["t"] or "").strip():
             return None                        # contenu pas encore lu, ou document sans texte
         try:
-            return docs.text_thumbnail(d["t"], ext, s, d["title"])
+            return docs.text_thumbnail(d["t"], ext, s, d["title"], note)
         except Exception:  # noqa
             return None
 
@@ -462,13 +482,16 @@ def create_app(state=None):
         ext = os.path.splitext(r["path"])[1].lower()
         if r["kind"] == "other":
             return placeholder(ext.lstrip(".") or "fichier")
-        key = hashlib.sha1(("%s|%s|%s|%s|v2" % (norm(r["path"]), r["mtime"], r["size"], s)).encode()).hexdigest()
+        etat = S.previews.state(r["path"], r["mtime"], r["size"]) if r["kind"] == "doc" else ""
+        key = hashlib.sha1(("%s|%s|%s|%s|v3%s" % (norm(r["path"]), r["mtime"], r["size"], s, etat)).encode()).hexdigest()
         cf = os.path.join(S.thumbs, key[:2], key + ".jpg")
         if not os.path.exists(cf):
             if r["kind"] == "doc":
-                im = pdf_page(r["path"], s) if ext == ".pdf" and docs.PDF else None
-                if im is None:                 # Word, Excel, courriel, texte... : aperçu du début du texte
-                    im = doc_page(r["id"], ext, s)
+                im, provisoire = doc_thumb(r, ext, s)
+                if im is not None and provisoire:      # le rendu exact arrive : ne pas figer cette image
+                    buf = io.BytesIO()
+                    im.save(buf, "JPEG", quality=82)
+                    return Response(buf.getvalue(), mimetype="image/jpeg", headers={"Cache-Control": "no-store"})
             else:
                 im = load_small(r["path"], r["kind"], s)
             if im is None:
@@ -476,7 +499,56 @@ def create_app(state=None):
             os.makedirs(os.path.dirname(cf), exist_ok=True)
             im.save(cf + ".tmp", "JPEG", quality=82)
             os.replace(cf + ".tmp", cf)
-        return send_file(cf, mimetype="image/jpeg", max_age=86400)
+        return send_file(cf, mimetype="image/jpeg", max_age=0 if r["kind"] == "doc" else 86400)
+
+    def doc_thumb(r, ext, s):
+        """(image, provisoire). Ordre : rendu exact (PDF du document lui-même, ou PDF produit par Office /
+        LibreOffice), vignette OpenDocument, sinon texte extrait — marqué « texte seul »."""
+        pv = S.previews.pdf_path(r["path"], r["mtime"], r["size"])
+        if docs.PDF and os.path.isfile(pv):
+            im = pdf_page(pv, s)
+            if im is not None:
+                return im, False
+        if ext == ".pdf" and docs.PDF:
+            im = pdf_page(r["path"], s)
+            if im is not None:
+                return im, False
+        im = render.embedded_thumbnail(r["path"])
+        if im is not None:
+            im.thumbnail((s, s))
+            return im, False
+        attendu = S.previews.request(r)        # conversion en arrière-plan si un moteur est installé
+        if ext in render.CONVERTIBLE:
+            note = "TEXTE SEUL — rendu exact en cours" if attendu else "TEXTE SEUL — mise en page non reproduite"
+        else:
+            note = None                        # courriel, texte, CSV : le texte EST le contenu
+        return doc_page(r["id"], ext, s, note), bool(attendu)
+
+    @app.get("/api/apercus")
+    def api_apercus():
+        """Parmi ces fichiers, lesquels ont maintenant leur rendu exact ? (la page rafraîchit leurs miniatures)"""
+        ids = [int(x) for x in (request.args.get("ids") or "").split(",") if x.strip().isdigit()][:1000]
+        ready = []
+        for i in range(0, len(ids), 900):
+            ch = ids[i:i + 900]
+            for r in S.db.q("SELECT id, path, mtime, size FROM files WHERE id IN (%s)" % ",".join("?" * len(ch)), ch):
+                if S.previews.state(r["path"], r["mtime"], r["size"]) == "exact":
+                    ready.append(r["id"])
+        return jsonify(ready=ready, pending=S.previews.pending(), engine=S.previews.engine())
+
+    @app.get("/api/apercu")
+    def api_apercu():
+        """Le document converti en PDF par Office / LibreOffice : son rendu exact, page par page."""
+        r = file_row(int(request.args.get("id", 0)))
+        pv = S.previews.pdf_path(r["path"], r["mtime"], r["size"])
+        if not os.path.isfile(pv):
+            abort(404)
+        return send_file(pv, mimetype="application/pdf", max_age=0)
+
+    @app.post("/api/apercus/test")
+    def api_apercus_test():
+        ok, msg, secs = S.previews.self_test()
+        return jsonify(ok=ok, message=msg, seconds=secs, engine=S.previews.engine())
 
     @app.get("/api/facethumb")
     def api_facethumb():
@@ -517,10 +589,16 @@ def create_app(state=None):
     def doc_info(fid, path):
         d = S.db.one("SELECT substr(text, 1, 60000) text, length(text) chars, words, method, pages, title, sender, "
                      "mdate, extra FROM doctext WHERE file_id=?", (fid,))
-        fam = docs.FAMILY_LABELS.get(docs.family(os.path.splitext(path)[1]), "Document")
+        ext = os.path.splitext(path)[1].lower()
+        fam = docs.FAMILY_LABELS.get(docs.family(ext), "Document")
+        f = S.db.one("SELECT id, path, mtime, size FROM files WHERE id=?", (fid,))
+        etat = S.previews.state(f["path"], f["mtime"], f["size"]) if f else ""
+        if f and not etat and ext in render.CONVERTIBLE and S.previews.request(f):
+            etat = "attente"
+        vue = {"apercu": etat, "convertible": ext in render.CONVERTIBLE, "moteur": S.previews.engine()}
         if not d:
-            return {"family": fam, "text": "", "words": 0, "method": None}
-        out = dict(d, family=fam)
+            return dict({"family": fam, "text": "", "words": 0, "method": None}, **vue)
+        out = dict(d, family=fam, **vue)
         try:
             out["extra"] = json.loads(d["extra"]) if d["extra"] else None
         except ValueError:

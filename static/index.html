@@ -110,6 +110,17 @@ details.adv>summary:hover{color:var(--acc)}details.adv[open]>summary{margin-bott
 .gstep.done{border-color:var(--ok)}.gstep.done .gn{background:var(--ok);color:#fff}.gstep.done .ga{color:var(--ok)}
 .gstep.wait{opacity:.6}
 @keyframes secoue{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}.gstep.secoue{animation:secoue .25s 2}
+#cmp{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:none;align-items:center;justify-content:center}
+#cmp .box{background:var(--panel);border-radius:12px;width:min(1500px,96vw);height:92vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line)}
+#cmp .hd{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+#cmp .cols{display:grid;grid-template-columns:1fr 1fr;gap:0;font-weight:600;border-bottom:1px solid var(--line)}
+#cmp .cols>div{padding:8px 16px;word-break:break-all}#cmp .cols>div+div{border-left:1px solid var(--line)}
+#cmp .rows{overflow:auto;flex:1;font-size:13px;line-height:1.45}
+.crow{display:grid;grid-template-columns:1fr 1fr}.crow>div{padding:3px 16px;white-space:pre-wrap;word-break:break-word;min-height:1.4em}
+.crow>div+div{border-left:1px solid var(--line)}
+.crow.m>div{background:var(--warnbg)}.crow.a>div:first-child,.crow.b>div:last-child{background:var(--badbg)}
+.crow.a>div:last-child,.crow.b>div:first-child{background:var(--panel2)}
+#cmp.diffonly .crow.e{display:none}
 #lbnav{position:fixed;inset:0;pointer-events:none;z-index:51;display:none}
 #lbnav button{pointer-events:auto;position:absolute;top:44%;width:52px;height:74px;font-size:30px;border-radius:10px;background:rgba(20,26,40,.72);color:#fff;border:1px solid rgba(255,255,255,.25)}
 #lbnav button:hover{background:var(--acc)}#lbprev{left:14px}#lbnext{right:14px}
@@ -197,6 +208,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
       <label class="opt"><input type="checkbox" id="m_exact" checked><b>Copies exactes</b></label>
       <label class="opt"><input type="checkbox" id="m_visual" checked><b>Photos et vidéos ressemblantes</b></label>
       <label class="opt" title="Lit le texte des documents (Word, PDF, tableurs, courriels...) pour retrouver le même contenu dans des fichiers différents, les versions proches d'un document, et pour chercher un mot dans l'onglet Explorer. Les PDF scannés sont lus par OCR si « Texte » n'est pas sur « aucun »."><input type="checkbox" id="m_doctext" checked><b>Contenu des documents</b></label>
+      <label class="opt" id="l_docprev" title="Convertit chaque document Word, Excel, PowerPoint ou OpenDocument en PDF avec Microsoft Office ou LibreOffice pour afficher sa mise en page réelle (miniature et aperçu). Environ une seconde par document, une seule fois."><input type="checkbox" id="m_docprev" checked><b>Rendu exact des documents</b></label>
       <label class="opt"><input type="checkbox" id="m_quality" checked><b>Qualité des photos (netteté)</b></label>
       <label class="opt" title="Par défaut, seuls les fichiers nouveaux ou modifiés sont analysés (les autres sont repris de l'index, c'est pourquoi une 2e analyse est quasi instantanée). Cochez pour tout recalculer : visages, objets, empreintes. Les regroupements de personnes de ce dossier seront refaits."><input type="checkbox" id="m_force"><b>Tout réanalyser</b></label>
       <label class="opt">ignorer les fichiers de moins de <input type="number" id="min_kb" value="0" min="0" style="width:70px"> Ko</label>
@@ -220,7 +232,7 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
 <section class="tab on" id="t_dup">
   <div class="bar" id="dbar" style="display:none;margin:-14px -20px 12px">
     <div class="row"><span id="stats"></span><span style="flex:1"></span>
-      <select id="f_kind"><option value="all">Afficher : tout</option><option value="exact">Identiques (bit à bit)</option><option value="visuel">Photos / vidéos similaires</option><option value="contenu">Documents : même contenu</option><option value="proche">Documents : versions proches</option><option value="mail">Courriels en double</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents</option><option value="other">Autres fichiers</option></select> <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option></select> <select id="f_auto"><option value="">✔ Cocher automatiquement…</option><option value="best">Garder la meilleure (netteté, résolution, yeux ouverts)</option><option value="oldest">Garder le plus ancien</option><option value="newest">Garder le plus récent</option><option value="biggest">Garder le plus lourd</option><option value="res">Garder la meilleure résolution</option><option value="shortpath">Garder le chemin le plus court</option><option value="none">Tout désélectionner</option></select> <button id="selall" title="Coche TOUTES les photos de tous les groupes affichés (toutes les pages), y compris la référence">Tout sélectionner</button><button id="selnone">Tout désélectionner</button> <button id="mv" disabled>Déplacer…</button><button id="rm" class="bad" disabled>Supprimer</button></div>
+      <select id="f_kind"><option value="all">Afficher : tout</option><option value="exact">Identiques (bit à bit)</option><option value="visuel">Photos / vidéos similaires</option><option value="contenu">Documents : même contenu</option><option value="proche">Documents : versions proches</option><option value="mail">Courriels en double</option><option value="image">Images</option><option value="video">Vidéos</option><option value="doc">Documents</option><option value="other">Autres fichiers</option></select> <select id="f_sort"><option value="waste">Tri : espace gaspillé</option><option value="count">Tri : nb de fichiers</option><option value="name">Tri : ordre</option><option value="score">Tri : les plus ressemblants</option></select> <select id="f_auto"><option value="">✔ Cocher automatiquement…</option><option value="best">Garder la meilleure (netteté, résolution, yeux ouverts)</option><option value="oldest">Garder le plus ancien</option><option value="newest">Garder le plus récent</option><option value="biggest">Garder le plus lourd</option><option value="res">Garder la meilleure résolution</option><option value="shortpath">Garder le chemin le plus court</option><option value="none">Tout désélectionner</option></select> <button id="selall" title="Coche TOUTES les photos de tous les groupes affichés (toutes les pages), y compris la référence">Tout sélectionner</button><button id="selnone">Tout désélectionner</button> <button id="mv" disabled>Déplacer…</button><button id="rm" class="bad" disabled>Supprimer</button></div>
     <details class="adv" id="dadv"><summary>⚙ Réglages de comparaison et d'affichage</summary><div class="row">
       <label class="opt">rigueur <select id="rig"><option value="tres_strict">très stricte</option><option value="strict" selected>stricte (recommandé)</option><option value="normal">normale</option><option value="large">large</option><option value="etalonne" id="rig_cal" disabled>étalonnée</option></select></label> <label class="opt" title="Deux photos de dates de prise de vue EXIF différentes ne sont jamais groupées. Sans date EXIF, le contrôle est ignoré et signalé."><input type="checkbox" id="o_exif" checked><b>Dates EXIF</b></label> <label class="opt" id="l_cd"><input type="checkbox" id="o_clipd"><b>IA</b> ≥ <input type="number" id="clip_thr" value="0.96" step="0.01" min="0.85" max="0.99" style="width:70px"></label> <label class="opt" title="Deux documents sont des « versions proches » si cette part de leur texte est commune.">documents ≥ <select id="doc_thr"><option value="0.95">95 %</option><option value="0.9">90 %</option><option value="0.8" selected>80 %</option><option value="0.7">70 %</option><option value="0.6">60 %</option><option value="0.5">50 %</option></select></label>
       <label class="opt">taille des miniatures <input type="range" id="f_size" min="120" max="360" value="190" title="Taille des miniatures"></label> <label class="opt">par page <select id="perg"><option value="10">10 groupes</option><option value="20" selected>20</option><option value="50">50</option><option value="100">100</option><option value="200">200</option></select></label>
@@ -348,6 +360,9 @@ code{background:var(--bg);padding:1px 5px;border-radius:4px}
   <div class="row" style="justify-content:flex-end;margin:0"><button id="mcancel">Annuler</button><button id="mok" class="pri">Choisir ce dossier</button></div>
 </div></div>
 <div id="selbar"><b id="selcount"></b><button id="sb_none">Tout décocher</button><button id="sb_mv">📂 Déplacer…</button><button id="sb_rm" class="bad">🗑 Supprimer</button></div>
+<div id="cmp"><div class="box"><div class="hd"><b id="cmp_t">Comparaison</b><span class="muted" id="cmp_i"></span><span style="flex:1"></span>
+  <label class="opt"><input type="checkbox" id="cmp_d"><b>Différences seulement</b></label><button id="cmp_x">Fermer</button></div>
+  <div class="cols"><div id="cmp_a"></div><div id="cmp_b"></div></div><div class="rows" id="cmp_r"></div></div></div>
 <div id="toast"></div>
 <div id="bye"><div>✅ Chasseur de doublons est arrêté.</div><small class="muted">Plus aucun processus ne tourne. Vous pouvez fermer cet onglet.<br>Pour revenir, relancez l'application.</small></div>
 
@@ -381,6 +396,7 @@ function showTab(t){curTab=t;document.querySelectorAll("#tabs button").forEach(x
 // ---------------------------------------------------------------- capacités
 async function loadCaps(){
   const r=await api("/api/caps");CAPS=r.caps;SET=r.settings;
+  {const l=$("#l_docprev"),i=$("#m_docprev"),ok=!!CAPS.doc_engine;i.disabled=!ok;l.classList.toggle("dis",!ok);if(!ok){i.checked=false;l.title="Aucun logiciel de rendu trouvé sur ce PC : installez Microsoft Office ou LibreOffice (voir Réglages). En attendant, seul le texte des documents est affiché."}}
   const MODELE={l_faces:()=>SET.face_engine==="insightface"?"insightface":"opencv_faces",l_objects:()=>"yolox_s",l_clip:()=>"clip",l_cd:()=>"clip"};
   const manquants=[];
   const dis=(id,on,msg,nom)=>{
@@ -446,7 +462,7 @@ async function openModels(key){
 }
 
 // ---------------------------------------------------------------- analyse
-function scanOpts(){return{images:$("#o_images").checked,videos:$("#o_videos").checked,documents:$("#o_docs").checked,doc_text:$("#m_doctext").checked,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,
+function scanOpts(){return{images:$("#o_images").checked,videos:$("#o_videos").checked,documents:$("#o_docs").checked,doc_text:$("#m_doctext").checked,doc_preview:$("#m_docprev").checked&&!$("#m_docprev").disabled,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,
   exact:$("#m_exact").checked,visual:$("#m_visual").checked,faces:$("#m_faces").checked,objects:$("#m_objects").checked,ocr:$("#m_ocr").value,
   clip:$("#m_clip").checked,quality:$("#m_quality").checked,force:$("#m_force").checked,vframes:+$("#vprec").value,face_engine:SET.face_engine||"opencv",face_det:$("#fdet").value}}
 function dupOpts(){return{rigor:$("#rig").value,exif:$("#o_exif").checked,clip_dupes:$("#o_clipd").checked,clip_thr:+$("#clip_thr").value,
@@ -540,7 +556,8 @@ function renderGroups(){
   for(const g of d.groups){
     g._subs=[...new Set(g.files.filter(f=>f.sub!=null).map(f=>f.sub))];
     g.files.forEach(f=>byId[f.id]=f);
-    h+=`<section class="group"><div class="ghead"><span class="badge b-${g.kind}" title="${({exact:"Fichiers identiques bit à bit (SHA-256)",visuel:"Images ou vidéos visuellement identiques",contenu:"Même texte dans des fichiers différents (autre format, ré-enregistrement, métadonnées)",proche:"Versions proches d'un même document : lisez avant de supprimer",mail:"Même courriel (même identifiant de message)"})[g.kind]||""}">${({exact:"IDENTIQUES",visuel:"SIMILAIRES",contenu:"MÊME CONTENU",proche:"VERSIONS PROCHES",mail:"MÊME COURRIEL"})[g.kind]||g.kind}</span>
+    const paire=g.kind==="proche"&&g.files.length===2,note=paire?Math.min(...g.files.map(f=>f.score==null?100:f.score)):null;
+    h+=`<section class="group"><div class="ghead"><span class="badge b-${g.kind}" title="${({exact:"Fichiers identiques bit à bit (SHA-256)",visuel:"Images ou vidéos visuellement identiques",contenu:"Même texte dans des fichiers différents (autre format, ré-enregistrement, métadonnées)",proche:"Versions proches d'un même document : lisez avant de supprimer",mail:"Même courriel (même identifiant de message)"})[g.kind]||""}">${({exact:"IDENTIQUES",visuel:"SIMILAIRES",contenu:"MÊME CONTENU",proche:"PAIRE À COMPARER",mail:"MÊME COURRIEL"})[g.kind]||g.kind}</span>${paire?`<b style="color:var(--warn)">${note} % de texte commun</b><button data-act="cmp" data-g="${g.id}" class="pri" title="Affiche les deux textes côte à côte, différences surlignées">⇄ Comparer les deux</button>`:""}
       ${g.nodate?`<span class="badge b-warn" title="Au moins une photo sans date EXIF : le contrôle de date a été ignoré. Vérifiez avant de supprimer.">date non vérifiée</span>`:""}
       <b>${g.files.length} fichiers</b><small>récupérable : ${fmtSize(g.waste)}</small><span class="sp"></span>
       <button data-act="gbest" data-g="${g.id}">Garder la meilleure</button><button data-act="gall" data-g="${g.id}">Tout cocher sauf la réf.</button><button data-act="gfull" data-g="${g.id}" title="Coche toutes les photos de ce groupe">Tout cocher</button></div><div class="grid">`;
@@ -587,6 +604,7 @@ $("#res").addEventListener("click",async e=>{
     g.files.forEach(x=>x===keep?sel.delete(x.id):sel.add(x.id));renderGroups()}
   else if(act==="del"){if(confirm(`Supprimer DÉFINITIVEMENT ?\n\n${f.path}`))doDelete([f.id])}
   else if(act==="ren")doRename(f);
+  else if(act==="cmp"){const g=gdata.groups.find(g=>g.id==el.dataset.g);comparer(g.files[0],g.files[1])}
 });
 // Sélection multiple : un clic sur une case, puis Maj + clic sur une autre photo (case ou image) :
 // toutes les photos entre les deux prennent l'état de la première (cochées ou décochées).
@@ -613,6 +631,29 @@ async function doRename(f){
   const n=prompt("Nouveau nom :",f.name);if(!n||n===f.name)return;
   try{const r=await api("/api/rename",{id:f.id,name:n});toast("Renommé en "+n,false,{label:"Annuler",fn:()=>undo([r.journal])});refreshAll()}catch(er){toast(er.message,1)}
 }
+// ---- rendu exact : les miniatures « texte seul » sont remplacées dès que la conversion est prête
+const CONV=/\.(docx|docm|dotx|dotm|doc|dot|rtf|odt|xlsx|xlsm|xltx|xls|ods|pptx|ppsx|pptm|potx|ppt|pps|odp)$/i;
+function rafraichirMini(ids){ids.forEach(id=>document.querySelectorAll(`.card[data-id="${id}"] .thumb img`).forEach(im=>{im.src=`/api/thumb?id=${id}&s=400&v=${Date.now()}`}))}
+let suiviT=null,suiviPret=new Set(),suiviN=0;
+function suivreApercus(){clearTimeout(suiviT);suiviN=0;if(!CAPS.doc_engine)return;
+  const tour=async()=>{const ids=[...new Set([...document.querySelectorAll(".tab.on .card")].map(c=>+c.dataset.id))].filter(i=>byId[i]&&byId[i].kind==="doc"&&CONV.test(byId[i].name||"")&&!suiviPret.has(i)).slice(0,400);
+    if(!ids.length)return;
+    try{const r=await api("/api/apercus?ids="+ids.join(","));const neufs=r.ready.filter(i=>!suiviPret.has(i));neufs.forEach(i=>suiviPret.add(i));
+      rafraichirMini(neufs);
+      if(++suiviN<80&&(r.pending||suiviN<4))suiviT=setTimeout(tour,2500)}catch(e){}};
+  suiviT=setTimeout(tour,1200)}
+new MutationObserver(()=>suivreApercus()).observe(document.querySelector("main"),{childList:true,subtree:true,attributes:false});
+// ---- comparaison de deux documents, côte à côte
+async function comparer(a,b){
+  $("#cmp").style.display="flex";$("#cmp_r").innerHTML='<div class="empty">Comparaison…</div>';$("#cmp_a").textContent=a.name;$("#cmp_b").textContent=b.name;$("#cmp_i").textContent="";
+  try{const r=await api(`/api/compare?a=${a.id}&b=${b.id}`);
+    $("#cmp_i").textContent=`${r.same} ligne(s) identique(s) · ${r.diff} différente(s)`+(r.truncated?" · affichage limité aux 4000 premières lignes":"");
+    const cls={"=":"e","~":"m","-":"a","+":"b"};
+    $("#cmp_r").innerHTML=r.rows.length?r.rows.map(([t,x,y])=>`<div class="crow ${cls[t]}"><div>${esc(x??"")}</div><div>${esc(y??"")}</div></div>`).join(""):'<div class="empty">Aucun texte à comparer dans ces documents.</div>';
+    $("#cmp_d").checked=r.diff>0&&r.same>30;$("#cmp").classList.toggle("diffonly",$("#cmp_d").checked)}
+  catch(e){$("#cmp_r").innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
+$("#cmp_x").onclick=()=>$("#cmp").style.display="none";$("#cmp").onclick=e=>{if(e.target.id==="cmp")$("#cmp").style.display="none"};
+$("#cmp_d").onchange=e=>$("#cmp").classList.toggle("diffonly",e.target.checked);
 // ---- navigation dans l'aperçu : flèches gauche / droite, Suppr pour supprimer le fichier affiché
 let lbIds=[],lbCur=null,supprOk=false;
 function lbOuvre(f,garder){
@@ -642,16 +683,25 @@ function viewDoc(f,garder){
   lbOuvre(f,garder);
   const src="/api/file?id="+f.id,pdf=/\.pdf$/i.test(f.name||f.path||"");
   $("#lbc").innerHTML=`<div class="doc">Lecture…</div>`;zoneOff();
-  $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+(f.kind==="doc"?' <button id="lbsim">Documents similaires</button>':"")+(pdf?' <button id="lbpdf">Afficher le PDF</button>':"")+` <a href="${src}" download><button>Télécharger / ouvrir</button></a>`;
+  $("#lbcap").innerHTML=esc(f.path)+" — "+fmtSize(f.size)+(f.kind==="doc"?' <button id="lbsim">Documents similaires</button>':"")+` <a href="${src}" download><button>Télécharger / ouvrir</button></a>`;
   $("#lbdet").textContent="";$("#lb").style.display="flex";
   $("#lbcap").onclick=ev=>ev.stopPropagation();
   if($("#lbsim"))$("#lbsim").onclick=()=>{closeLb();openSimilar(f)};
-  if($("#lbpdf"))$("#lbpdf").onclick=()=>{$("#lbc").innerHTML=`<iframe src="${src}"></iframe>`};
-  api("/api/info?id="+f.id).then(r=>{const d=r.doc;const box=$("#lbc .doc");if(!box)return;
+  const rendu=u=>{if(lbCur!==f)return;$("#lbc").innerHTML=`<iframe src="${u}#toolbar=0&navpanes=0&view=FitH"></iframe>`};
+  api("/api/info?id="+f.id).then(r=>{const d=r.doc;const box=$("#lbc .doc");if(!box||lbCur!==f)return;
     if(!d){box.textContent="Ce type de fichier n'est comparé que bit à bit : son contenu n'est pas lu.";return}
     const x=d.extra||{},hd=[d.family,d.pages?d.pages+" page(s)":"",d.words?d.words+" mots":"",d.method==="ocr"?"texte lu par OCR":"",d.method==="approx"?"lecture approximative (ancien format)":""].filter(Boolean).join(" · ");
-    box.innerHTML=`<div class="hd">${esc(hd)}${x.de?`<br>De : ${esc(x.de)}`:""}${x.a?`<br>À : ${esc(x.a)}`:""}${d.mdate?`<br>Envoyé le ${fmtDate(d.mdate)}`:""}${x.pieces&&x.pieces.length?`<br>Pièces jointes : ${esc(x.pieces.join(", "))}`:""}</div>`+
-      (d.error?`<b>Contenu non lu : ${esc(d.error)}</b>`:d.text?esc(d.text)+(d.chars>d.text.length?"\n\n[… texte tronqué pour l'aperçu …]":""):"<i>Aucun texte dans ce document"+(pdf?" (PDF scanné ? relancez l'analyse avec « Texte » sur « captures/documents » pour l'OCR)":"")+".</i>")}).catch(e=>{const b=$("#lbc .doc");if(b)b.textContent="Aperçu impossible : "+e.message});
+    const mode=d.convertible?(d.apercu==="exact"?"":d.apercu==="attente"?"⏳ Rendu exact en préparation : il remplacera ce texte dans quelques secondes.":d.apercu==="echec"?"⚠ Le rendu exact a échoué pour ce document : seul le texte extrait est affiché.":d.moteur?"":"ℹ Texte extrait seulement : la mise en page, les images et les tableaux ne sont pas reproduits. Installez Microsoft Office ou LibreOffice pour le rendu exact (Réglages)."):"";
+    const texte=`<div class="hd">${esc(hd)}${x.de?`<br>De : ${esc(x.de)}`:""}${x.a?`<br>À : ${esc(x.a)}`:""}${d.mdate?`<br>Envoyé le ${fmtDate(d.mdate)}`:""}${x.pieces&&x.pieces.length?`<br>Pièces jointes : ${esc(x.pieces.join(", "))}`:""}${mode?`<br><b style="color:#a05a00">${mode}</b>`:""}</div>`+
+      (d.error?`<b>Contenu non lu : ${esc(d.error)}</b>`:d.text?esc(d.text)+(d.chars>d.text.length?"\n\n[… texte tronqué pour l'aperçu …]":""):"<i>Aucun texte dans ce document"+(pdf?" (PDF scanné ? relancez l'analyse avec « Texte » sur « captures/documents » pour l'OCR)":"")+".</i>");
+    box.innerHTML=texte;
+    const exact=()=>{rendu("/api/apercu?id="+f.id+"&v="+Date.now());
+      if(!$("#lbtxt")){const b=document.createElement("button");b.id="lbtxt";b.textContent="Voir le texte extrait";b.onclick=()=>{if($("#lbc iframe")){$("#lbc").innerHTML='<div class="doc"></div>';$("#lbc .doc").innerHTML=texte;b.textContent="Voir le document (rendu exact)"}else{exact();b.textContent="Voir le texte extrait"}};$("#lbcap").append(" ",b)}};
+    if(pdf)rendu(src);
+    else if(d.apercu==="exact")exact();
+    else if(d.apercu==="attente"){let n=0;const t=setInterval(async()=>{if(lbCur!==f||++n>40)return clearInterval(t);
+      try{const q=await api("/api/apercus?ids="+f.id);if(q.ready.includes(f.id)){clearInterval(t);if(lbCur===f)exact();rafraichirMini([f.id])}else if(!q.pending){clearInterval(t)}}catch(e){clearInterval(t)}},1500)}
+  }).catch(e=>{const b=$("#lbc .doc");if(b)b.textContent="Aperçu impossible : "+e.message});
 }
 $("#lbc").addEventListener("click",e=>{if(e.target.closest(".doc,iframe"))e.stopPropagation()});
 function view(f,garder){
@@ -709,7 +759,7 @@ $("#lbdet").addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c
   if(![...sel.options].some(o=>o.value===c.dataset.v))sel.append(new Option(c.textContent,c.dataset.v));
   sel.value=c.dataset.v;xsearch(1);toast("Toutes les photos avec « "+c.textContent+" »")});
 $("#lb").onclick=closeLb;
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeLb();$("#modal").style.display="none"}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if($("#cmp").style.display==="flex"){$("#cmp").style.display="none";return}closeLb();$("#modal").style.display="none"}});
 
 // ---------------------------------------------------------------- actions groupées
 async function doDelete(ids,allow_last=false){
@@ -1033,7 +1083,14 @@ async function loadSettings(){
   const row=(k,m)=>{const p=m.progress;const pr=p&&p.status==="running"?` ${p.total?Math.round(100*p.done/p.total):0} %`:p&&p.status==="error"?` <span style="color:var(--bad)">erreur : ${esc(p.error)}</span>`:"";
     return `<tr data-mrow="${k}"><td><b>${esc(m.label)}</b><br><span class="muted">${esc(m.license)}</span></td><td>${m.size?fmtSize(m.size):"?"}</td><td>${m.available?"✔ installé":"absent"}${pr}</td>
       <td>${m.available?`<button data-mdel="${k}">Supprimer</button>`:`<button data-mdl="${k}" ${p&&p.status==="running"?"disabled":""}>Télécharger</button>`}</td></tr>`};
+  const moteurs={office:"Microsoft Office",libreoffice:"LibreOffice"},dispo=CAPS.doc_engines||[];
   $("#settings").innerHTML=`
+  <div class="panel"><h3>Rendu exact des documents (Word, Excel, PowerPoint, OpenDocument)</h3>
+    <p class="muted" style="margin:0 0 8px">Pour afficher un document tel qu'il est réellement (mise en page, images, tableaux), l'application le fait convertir en PDF par un logiciel installé sur ce PC. Sans ce logiciel, seul le texte extrait est affiché, avec la mention « TEXTE SEUL ».</p>
+    <div class="row"><span>Logiciels trouvés : <b>${dispo.length?dispo.map(x=>moteurs[x]).join(", "):"aucun"}</b></span>
+      <label class="opt">Utiliser <select id="doc_eng"><option value="auto">Automatique (Microsoft Office en priorité)</option><option value="office" ${dispo.includes("office")?"":"disabled"}>Microsoft Office</option><option value="libreoffice" ${dispo.includes("libreoffice")?"":"disabled"}>LibreOffice</option><option value="aucun">Aucun : texte seul</option></select></label>
+      <button id="doc_test" ${CAPS.doc_engine?"":"disabled"}>Tester la conversion</button><span class="muted" id="doc_test_r">${CAPS.doc_engine?"actif : "+moteurs[CAPS.doc_engine]:dispo.length?"désactivé":"installez Microsoft Office ou LibreOffice (gratuit), puis relancez l'application"}</span></div>
+  </div>
   <div class="panel"><h3>Modèles (téléchargés à la demande dans le dossier <code>models/</code>, jamais dans le dépôt)</h3>
     <div class="lic">⚠ ${esc(r.license_insightface)}<br><label class="opt" style="margin-top:6px"><input type="checkbox" id="lic_if" ${M.insightface.license_ok?"checked disabled":""}><b>J'ai lu et j'accepte : usage personnel de recherche, non commercial.</b></label></div>
     <table style="margin-top:10px"><tr><th>Modèle</th><th>Taille</th><th>État</th><th></th></tr>${Object.entries(M).map(([k,m])=>row(k,m)).join("")}</table>
@@ -1056,6 +1113,9 @@ async function loadSettings(){
       <label class="opt">Photo floue si netteté < <input type="number" step="1" id="s_blur" value="${SET.blur_min}" style="width:80px"></label>
       <button id="s_save" class="pri">Enregistrer</button></div>
     <p class="muted">Les données de visages restent sur ce PC (base locale) et ne sont jamais envoyées sur le réseau. Bouton d'effacement dans l'onglet Personnes.</p></div>`;
+  $("#doc_eng").value=CAPS.doc_engine_choice||"auto";
+  $("#doc_eng").onchange=async e=>{await api("/api/settings",{doc_preview_engine:e.target.value});await loadCaps();toast("Moteur de rendu enregistré");loadSettings()};
+  $("#doc_test").onclick=async()=>{$("#doc_test_r").textContent="Essai en cours…";try{const t=await api("/api/apercus/test",{});$("#doc_test_r").textContent=(t.ok?"✔ ":"✖ ")+t.message+` (${t.seconds} s)`}catch(e){$("#doc_test_r").textContent="✖ "+e.message}};
   $("#use_gpu").onchange=async e=>{await api("/api/settings",{use_gpu:e.target.checked});toast(e.target.checked?"GPU activé":"GPU désactivé : calcul sur le processeur");loadSettings()};
   if($("#gpu_dev")){$("#gpu_dev").value=String(CAPS.gpu_device);
     $("#gpu_dev").onchange=async e=>{await api("/api/settings",{gpu_device:e.target.value});toast("Carte graphique enregistrée : prise en compte à la prochaine analyse");loadSettings()}}
