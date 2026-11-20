@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.11.1 - 2026-11-20
+### Corrigé
+- **Analyse d'un autre dossier : plus de restes de l'analyse précédente.** L'Explorer, ses compteurs et les
+  photos similaires ne montrent plus que le dossier de la dernière analyse. L'index garde toujours les
+  dossiers déjà analysés : y revenir reste instantané.
+- L'Explorer se met à jour à la fin de chaque analyse ; avant, il gardait la liste de l'analyse précédente
+  jusqu'à une nouvelle recherche manuelle.
+- Le filtre « Afficher » de l'onglet Doublons, les filtres de l'Explorer et la photo de référence des
+  Similaires sont remis à zéro quand une nouvelle analyse commence.
+- Fichiers ignorés parce que leur type n'est pas coché à l'étape 2 (par exemple des photos alors que seuls
+  les documents sont cochés) : signalés en fin d'analyse et dans la zone de résultats, au lieu d'un
+  « Aucun doublon » trompeur.
+
 ## 2.11.0 - 2026-11-12
 ### Modifié
 - **Miniatures et aperçu EXACTS des documents bureautiques.** Word, Excel, PowerPoint et OpenDocument sont

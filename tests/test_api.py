@@ -77,3 +77,27 @@ def test_parcours_complet(client, state, photos, tmp_path):
 def test_effacer_biometrie(client, state):
     assert post(client, state, "/api/biometrics/clear", {}).status_code == 400
     assert post(client, state, "/api/biometrics/clear", {"confirm": "EFFACER"}).status_code == 200
+
+
+def test_nouvelle_analyse_remplace_la_vue(client, state, photos, tmp_path):
+    """Après l'analyse d'un autre dossier, l'Explorer et ses compteurs ne montrent plus l'ancien dossier ;
+    les types présents mais non cochés sont signalés."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "notes.txt").write_text("liste des courses")
+    (docs / "notes2.txt").write_text("liste des courses")
+    assert post(client, state, "/api/scan", {"path": str(docs), "options": {"others": True}}).status_code == 200
+    assert wait_scan(client)["status"] == "done"
+    assert {f["name"] for f in client.get("/api/search?per=100").get_json()["files"]} == {"notes.txt", "notes2.txt"}
+    # deuxième dossier : photos, mais l'utilisateur a laissé « Images » décoché
+    post(client, state, "/api/scan", {"path": str(photos), "options": {"images": False}})
+    st = wait_scan(client)
+    assert st["summary"]["excluded"].get("image", 0) >= 4
+    post(client, state, "/api/scan", {"path": str(photos), "options": {"images": True}})
+    wait_scan(client)
+    names = {f["name"] for f in client.get("/api/search?per=100").get_json()["files"]}
+    assert names and "notes.txt" not in names
+    ids = client.get("/api/search_ids").get_json()["ids"]
+    assert len(ids) == len(names)
+    fac = client.get("/api/facets").get_json()
+    assert "other" not in fac["kinds"] and fac["kinds"].get("image")

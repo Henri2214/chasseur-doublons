@@ -332,7 +332,9 @@ CD_MODELS_DIR=models CD_TEST_IMAGES=dossier_portraits python -m pytest tests/tes
 - une analyse complète avec tous les modules ;
 - l'interface dans Chromium sans affichage (onglets, recalcul de rigueur, glisser-déposer, aucune erreur
   JavaScript) ;
-- un vrai téléchargement de modèle via le gestionnaire.
+- un vrai téléchargement de modèle via le gestionnaire ;
+- (2.11.1) deux analyses successives de dossiers différents (documents puis photos) dans Chromium : Explorer,
+  compteurs et filtres repartent du nouveau dossier ; photos ignorées faute de case cochée signalées.
 
 **Non testé — à vérifier avec `tools/selftest.py` sur votre PC** :
 - **Windows** : lancer.bat, chemins longs, fichiers verrouillés, fichiers OneDrive, lecteurs réseau. Le code

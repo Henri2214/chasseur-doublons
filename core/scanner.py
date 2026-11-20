@@ -180,6 +180,13 @@ class Scanner:
                 seen[p] = (st.st_size, st.st_mtime, name, dpu)
             self.state["done"] = len(seen)
         stats["files"] = len(seen)
+        opt_of = {"image": "images", "video": "videos", "doc": "documents", "other": "others"}
+        excl = {}
+        for v in seen.values():
+            k = kind_of(v[2])
+            if not o.get(opt_of[k]):
+                excl[k] = excl.get(k, 0) + 1
+        stats["excluded"] = excl          # présents dans le dossier mais type non coché : signalé en fin d'analyse
 
         lo, hi = prefix_range(root)
         known = {r["path"]: (r["id"], r["size"], r["mtime"])

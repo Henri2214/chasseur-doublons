@@ -469,10 +469,18 @@ function dupOpts(){return{rigor:$("#rig").value,exif:$("#o_exif").checked,clip_d
   images:$("#o_images").checked,videos:$("#o_videos").checked,documents:$("#o_docs").checked,doc_content:$("#m_doctext").checked,doc_thr:+$("#doc_thr").value,others:$("#o_others").checked,min_kb:+$("#min_kb").value||0,exact:$("#m_exact").checked,visual:$("#m_visual").checked}}
 $("#go").onclick=async()=>{
   const path=$("#path").value.trim();if(!path)return toast("Indiquez un chemin",1);
-  try{await api("/api/scan",{path,options:scanOpts()});sel.clear();started=true;cancelling=false;phaseBase="";
+  try{await api("/api/scan",{path,options:scanOpts()});sel.clear();started=true;cancelling=false;phaseBase="";nouvelleVue();
     $("#phase").textContent="Analyse lancée…";$("#res").innerHTML='<div class="empty" style="font-size:18px">⏳ Analyse en cours…</div>';poll()}catch(e){toast(e.message,1)}
 };
-let cancelling=false,started=false,pollErr=0;
+let cancelling=false,started=false,pollErr=0,ignores="";
+// nouvelle analyse = nouveau dossier : rien de l'analyse précédente ne doit rester affiché ni filtré
+function nouvelleVue(){
+  $("#f_kind").value="all";page=1;gdata=null;
+  $("#xq").value="";["xkind","xperson","xobject","xscene","xblur","xfolder","xfrom","xto"].forEach(i=>$("#"+i).value="");
+  $("#xres").innerHTML="";xsel.clear();xdata=null;xpage=1;
+  simRef=null;simZone=null;simdata=null;ssel.clear();$("#sim_res").innerHTML="";$("#sim_bar").style.display="none";
+  $("#sim_head").innerHTML='<span class="muted">Aucune photo de référence pour l\'instant.</span>';
+}
 $("#stop").onclick=async()=>{
   cancelling=true;$("#stop").disabled=true;$("#stop").textContent="Annulation…";$("#phase").textContent="Annulation en cours…";
   try{await api("/api/cancel",{})}catch(e){toast("Annulation impossible : "+e.message,1);cancelling=false}
@@ -500,7 +508,13 @@ async function poll(){
   if(s.root){if(!$("#path").value)$("#path").value=s.root;if(s.root!==scanRoot){scanRoot=s.root;initTree()}}
   s.warnings.forEach(w=>toast(w,1));
   if(s.status==="done"){const m=s.summary||{};$("#m_force").checked=false;
-    phaseBase=`Analyse terminée en ${s.elapsed}s.`+(m.files!=null?` ${m.files} fichier(s) dans le dossier : ${m.new||0} nouveau(x), ${m.changed||0} modifié(s), ${m.removed||0} disparu(s), ${m.unchanged||0} inchangé(s) repris de l'index — ${m.to_analyse||0} analysé(s) cette fois`+(m.docs_new?`, dont ${m.docs_new} document(s) lu(s)`:"")+".":"");$("#phase").textContent=phaseBase;if(lastStatus==="running"||!s.has_results)await recompute();else loadGroups()}
+    phaseBase=`Analyse terminée en ${s.elapsed}s.`+(m.files!=null?` ${m.files} fichier(s) dans le dossier : ${m.new||0} nouveau(x), ${m.changed||0} modifié(s), ${m.removed||0} disparu(s), ${m.unchanged||0} inchangé(s) repris de l'index — ${m.to_analyse||0} analysé(s) cette fois`+(m.docs_new?`, dont ${m.docs_new} document(s) lu(s)`:"")+".":"");const ex=m.excluded||{},NOMS={image:"photo(s)",video:"vidéo(s)",doc:"document(s)",other:"autre(s) fichier(s)"},
+      exs=Object.keys(ex).filter(k=>k!=="other").map(k=>ex[k]+" "+NOMS[k]);
+    ignores=exs.join(", ");
+    if(exs.length){phaseBase+=" ⚠ Ignoré(s) car non coché(s) à l'étape 2 : "+exs.join(", ")+".";
+      if(started)toast("Ce dossier contient "+exs.join(", ")+" non analysé(s) : cochez le type correspondant à l'étape 2, puis relancez.",1)}
+    $("#phase").textContent=phaseBase;if(lastStatus==="running"||!s.has_results)await recompute();else loadGroups();
+    if(curTab==="exp"){loadFacets();xsearch(1)}}
   else if(s.status==="error"){$("#phase").textContent="Erreur : "+s.error;toast(s.error,1)}
   else if(s.status==="cancelled"){$("#phase").textContent="Analyse annulée.";if(started){toast("Analyse annulée.");$("#res").innerHTML='<div class="empty">Analyse annulée.</div>'}}
   started=false;lastStatus=s.status;
@@ -551,7 +565,7 @@ function renderGroups(){
   const d=gdata;byId={};
   $("#dbar").style.display="block";
   $("#stats").innerHTML=`<b>${d.summary.groups}</b> groupes · ${d.summary.files} fichiers · récupérable ≈ <b>${fmtSize(d.summary.waste)}</b>`;
-  if(!d.total){$("#res").innerHTML=`<div class="empty" style="font-size:18px">${d.summary.groups?"Aucun groupe pour ce filtre.":"🎉 Aucun doublon trouvé avec cette rigueur.<br><small class='muted'>Essayez une rigueur plus large ou vérifiez les modules cochés.</small>"}</div>`;updBar();return}
+  if(!d.total){$("#res").innerHTML=`<div class="empty" style="font-size:18px">${d.summary.groups?"Aucun groupe pour ce filtre.":ignores?"⚠ Rien n'a été comparé pour : "+ignores+".<br><small class='muted'>Cochez le type correspondant à l'étape 2, puis cliquez sur Analyser.</small>":"🎉 Aucun doublon trouvé avec cette rigueur.<br><small class='muted'>Essayez une rigueur plus large ou vérifiez les modules cochés.</small>"}</div>`;updBar();return}
   let h=pager(d.total,d.page,d.per,"gp");
   for(const g of d.groups){
     g._subs=[...new Set(g.files.filter(f=>f.sub!=null).map(f=>f.sub))];

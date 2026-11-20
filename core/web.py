@@ -21,7 +21,7 @@ from .config import DATA_DIR, IMG_EXT, RIGOR_LABELS, WEB_EXT
 from .db import Database
 from .imaging import HEIF, RAW, cv2, load_small
 from .models import LICENSE_INSIGHTFACE, ModelManager, gpu_adapters, providers
-from .scanner import Scanner
+from .scanner import Scanner, prefix_range
 from .util import Scope, kind_of, lp, norm
 
 
@@ -73,6 +73,14 @@ class State:
         except Exception:  # noqa
             pass
         return out[:200]
+
+    def current_root(self):
+        """Dossier de la dernière analyse : les listes (Explorer, compteurs, similaires) se limitent à lui."""
+        r = self.scanner.state.get("root") or self.last_opts.get("root")
+        if not r:
+            known = self.known_roots()
+            r = known[0] if known else None
+        return r
 
     def face_engine(self, name):
         """Moteur de visages (chargé une fois) ; lève RuntimeError si le modèle manque."""
@@ -312,7 +320,7 @@ def create_app(state=None):
                        dupes=S.dupe_state, has_results=bool(S.result.groups),
                        summary={k: (st.get("stats") or {}).get(k) for k in
                                 ("files", "new", "changed", "unchanged", "removed", "to_analyse", "docs_new",
-                                 "docs_text")})
+                                 "docs_text", "excluded")})
 
     @app.get("/api/report")
     def api_report():
@@ -768,6 +776,7 @@ def create_app(state=None):
         a = request.args
         filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to", "sort")
                    if a.get(k)}
+        filters.setdefault("folder", S.current_root())
         res = search.search(S.db, a.get("q", ""), filters, int(a.get("page", 1)), min(1000, int(a.get("per", 60))),
                             S.clip() if a.get("q") else None)
         res["files"] = [f for f in res["files"] if S.scope.contains(f["path"])]
@@ -789,13 +798,14 @@ def create_app(state=None):
         a = request.args
         filters = {k: a.get(k) for k in ("kind", "folder", "person", "object", "scene", "blur", "date_from", "date_to", "sort")
                    if a.get(k)}
+        filters.setdefault("folder", S.current_root())
         res = search.search(S.db, a.get("q", ""), filters, 1, 1, S.clip() if a.get("q") else None, ids_only=True)
         ids = in_scope_ids(res["ids"])
         return jsonify(ids=ids[:100000], total=len(ids), truncated=len(ids) > 100000)
 
     @app.get("/api/facets")
     def api_facets():
-        return jsonify(search.facets(S.db))
+        return jsonify(search.facets(S.db, S.current_root()))
 
     # ------------------------------------------------------------ photos similaires (clic sur une photo)
     def run_similar(a):
@@ -804,6 +814,15 @@ def create_app(state=None):
         src = [x for x in (a.get("sources") or "").split(",") if x] or None
         res = similar.similar(S.db, fid, thr, src)
         ok = set(in_scope_ids([r[0] for r in res]))
+        root = S.current_root()
+        if root:                       # seulement le dossier de la dernière analyse
+            lo, hi = prefix_range(root)
+            ids = list(ok)
+            ok = set()
+            for i in range(0, len(ids), 900):
+                ch = ids[i:i + 900]
+                ok |= {r["id"] for r in S.db.q("SELECT id FROM files WHERE id IN (%s) AND path >= ? AND path < ?"
+                                               % ",".join("?" * len(ch)), (*ch, lo, hi))}
         return fid, [r for r in res if r[0] in ok]
 
     @app.get("/api/similar")
@@ -1036,7 +1055,7 @@ def create_app(state=None):
     # ------------------------------------------------------------ étalonnage
     def calib_roots():
         """Dossier de la session d'analyse : l'étalonnage ne propose que des photos visibles ici."""
-        r = S.scanner.state.get("root") or S.last_opts.get("root")
+        r = S.current_root()
         return [r] if r else []
 
     @app.get("/api/calib/next")
