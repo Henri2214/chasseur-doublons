@@ -260,25 +260,34 @@ def _hydrate(db, ids, total, page, per, score, used, words=()):
     return {"total": total, "page": page, "per": per, "files": out, "sources": used}
 
 
-def facets(db):
+def facets(db, root=None):
+    """Compteurs de l'Explorer, limités au dossier `root` (dossier de la dernière analyse) s'il est donné."""
     from .config import DOC_FAMILIES as FAM
     fam_of = {e: k for k, s in FAM.items() for e in s}
-    kinds = {r["kind"]: r["n"] for r in db.q("SELECT kind, COUNT(*) n FROM files WHERE status='ok' OR kind='other' "
-                                              "GROUP BY kind")}
+    if root:
+        lo = root.rstrip("\\/") + os.sep
+        fp, fa = "path >= ? AND path < ?", (lo, lo + "\U0010ffff")
+    else:
+        fp, fa = "1=1", ()
+    inroot = "file_id IN (SELECT id FROM files WHERE %s)" % fp
+    kinds = {r["kind"]: r["n"] for r in db.q("SELECT kind, COUNT(*) n FROM files WHERE (status='ok' OR kind='other') "
+                                              "AND %s GROUP BY kind" % fp, fa)}
     families = {}
-    for r in db.q("SELECT ext, COUNT(*) n FROM files WHERE kind='doc' AND status='ok' GROUP BY ext"):
+    for r in db.q("SELECT ext, COUNT(*) n FROM files WHERE kind='doc' AND status='ok' AND %s GROUP BY ext" % fp, fa):
         k = fam_of.get(r["ext"])
         if k:
             families[k] = families.get(k, 0) + r["n"]
     blur_min = float(db.get_setting("blur_min", BLUR_GLOBAL_MIN))
     return {
         "kinds": kinds, "families": families,
-        "blurry": db.one("SELECT COUNT(*) n FROM files WHERE status='ok' AND blur IS NOT NULL AND blur < ?",
-                         (blur_min,))["n"],
+        "blurry": db.one("SELECT COUNT(*) n FROM files WHERE status='ok' AND blur IS NOT NULL AND blur < ? AND %s" % fp,
+                         (blur_min, *fa))["n"],
         "people": [dict(r) for r in db.q(
             "SELECT p.id, p.name, COUNT(DISTINCT x.file_id) n FROM persons p JOIN faces x ON x.person_id=p.id "
-            "GROUP BY p.id ORDER BY (p.name IS NULL), n DESC LIMIT 60")],
-        "objects": [dict(r) for r in db.q("SELECT label, COUNT(DISTINCT file_id) n FROM objects GROUP BY label ORDER BY n DESC")],
-        "scenes": [dict(r) for r in db.q("SELECT label, COUNT(*) n FROM scenes GROUP BY label ORDER BY n DESC")],
+            "WHERE x.%s GROUP BY p.id ORDER BY (p.name IS NULL), n DESC LIMIT 60" % inroot, fa)],
+        "objects": [dict(r) for r in db.q("SELECT label, COUNT(DISTINCT file_id) n FROM objects WHERE %s "
+                                          "GROUP BY label ORDER BY n DESC" % inroot, fa)],
+        "scenes": [dict(r) for r in db.q("SELECT label, COUNT(*) n FROM scenes WHERE %s GROUP BY label ORDER BY n DESC"
+                                         % inroot, fa)],
         "persons": [dict(r) for r in db.q("SELECT id, name FROM persons WHERE name IS NOT NULL ORDER BY name")],
     }
